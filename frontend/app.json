@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "eSports Manager",
+    "slug": "esport-manager",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.esportsmanager.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.esportsmanager.app"
+    },
+    "web": {
+    },
+    "scheme": "esport-manager"
+  }
+}
+
