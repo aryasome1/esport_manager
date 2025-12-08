@@ -9,107 +9,73 @@ export class DivisionService {
     this.baseUrl = '/api/divisions';
   }
 
-  // Get all available divisions
-  async getAllDivisions() {
-    // Use external APIs as the data sources for division availability
-    // We don't need the backend route here; return a static list that references the APIs
+  // --- CORE METHODS ---
+
+  /**
+   * Get all available divisions with complete UI data (Images, Colors, Stats)
+   * This is a STATIC method called directly by the UI
+   */
+  static async getAvailableDivisions() {
+    // Kita return data statis langsung biar cepat dan tidak error dependency
     return [
       {
         id: 'moba',
-        name: 'MOBA Division',
-        description: 'Mobile Legends style MOBA gameplay',
-        icon: '⚔️',
-        color: '#10B981',
-        games: ['Mobile Legends'],
-        externalApi: {
-          name: 'api-mobilelegends',
-          repo: 'https://github.com/ridwaanhall/api-mobilelegends'
+        type: 'moba',
+        name: 'MOBA DIVISION',
+        description: '5v5 Strategic Battle Arena',
+        summary: 'Classic 5v5 battlefield focusing on team synergy and objective control.',
+        // Gambar Fantasi/Peta untuk MOBA
+        image: 'https://img.freepik.com/free-vector/hand-drawn-fantasy-map-mountains_23-2149506472.jpg?w=1060', 
+        primaryColor: '#3b82f6',
+        features: [
+          { name: 'Hero Drafting', enabled: true },
+          { name: 'Lane Strategy', enabled: true },
+          { name: 'Coach System', enabled: true },
+          { name: 'Ranked Ladder', enabled: true },
+        ],
+        game_modes: ['Ranked', 'Classic', 'Brawl'],
+        stats: { 
+          players_online: 1250, 
+          active_matches: 45,
+          avg_match_duration: '18 min' 
         },
         isActive: true
       },
       {
         id: 'valorant',
-        name: 'Valorant Division',
-        description: 'Tactical FPS gameplay (Valorant)',
-        icon: '🎯',
-        color: '#8B5CF6',
-        games: ['Valorant'],
-        externalApi: {
-          name: 'valorant-api',
-          repo: 'https://github.com/Grenish/valorant-api'
+        type: 'tactical', // Backend uses 'tactical', Frontend UI calls it 'FPS DIVISION'
+        name: 'FPS DIVISION',
+        description: '5v5 Tactical Shooter',
+        summary: 'High-stakes tactical shooter emphasizing aim, utility usage, and map control.',
+        // Gambar Sci-fi/Cyberpunk untuk FPS
+        image: 'https://img.freepik.com/free-vector/cyberpunk-futuristic-city-background_23-2148798939.jpg?w=1060',
+        primaryColor: '#8b5cf6',
+        features: [
+          { name: 'Agent Selection', enabled: true },
+          { name: 'Map Control', enabled: true },
+          { name: 'Economy System', enabled: true },
+          { name: 'Tactical Timeouts', enabled: true },
+        ],
+        game_modes: ['Competitive', 'Unrated', 'Spike Rush'],
+        stats: { 
+          players_online: 2100, 
+          active_matches: 80,
+          avg_match_duration: '35 min'
         },
         isActive: true
       }
     ];
   }
 
-  // Static method to get available divisions (for compatibility)
-  static async getAvailableDivisions() {
-    const service = new DivisionService();
-    const divisions = await service.getAllDivisions();
-    // Transform to match expected format
-    return divisions.map(div => ({
-      id: div.id,
-      type: div.id === 'moba' ? 'moba' : 'tactical',
-      name: div.name,
-      description: div.description,
-      summary: div.description,
-      features: [
-        { name: 'Team Management', enabled: true },
-        { name: 'Match Simulation', enabled: true },
-        { name: 'Draft System', enabled: true },
-        { name: 'Player Stats', enabled: true },
-      ],
-      stats: {
-        players_online: 0,
-        active_matches: 0,
-        avg_match_duration: '30 min',
-      },
-      game_modes: div.games || [],
-    }));
-  }
+  // --- API METHODS (Untuk interaksi ke Backend nanti) ---
 
   // Get division by ID
   async getDivisionById(divisionId) {
     try {
-      // Use backend overview endpoint
       const response = await apiClient.get(`${this.baseUrl}/${divisionId}/overview`);
       return response.data;
     } catch (error) {
       console.error('Failed to get division:', error);
-      throw error;
-    }
-  }
-
-  // Create new division
-  async createDivision(divisionData) {
-    try {
-      const response = await apiClient.post(this.baseUrl, divisionData);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to create division:', error);
-      throw error;
-    }
-  }
-
-  // Update division
-  async updateDivision(divisionId, divisionData) {
-    try {
-      const response = await apiClient.patch(`${this.baseUrl}/${divisionId}`, divisionData);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to update division:', error);
-      throw error;
-    }
-  }
-
-  // Delete division
-  async deleteDivision(divisionId) {
-    try {
-      const response = await apiClient.delete(`${this.baseUrl}/${divisionId}`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to delete division:', error);
       throw error;
     }
   }
@@ -121,7 +87,6 @@ export class DivisionService {
       return response.data;
     } catch (error) {
       console.error('Failed to get user division:', error);
-      // Return null if no division selected
       return null;
     }
   }
@@ -136,111 +101,6 @@ export class DivisionService {
     } catch (error) {
       console.error('Failed to set user division:', error);
       throw error;
-    }
-  }
-
-  // Get division stats
-  async getDivisionStats(divisionId) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/${divisionId}/stats`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to get division stats:', error);
-      // Return fallback stats
-      return {
-        totalPlayers: 0,
-        activeMatches: 0,
-        totalMatches: 0,
-        averageRating: 0,
-        recentActivity: []
-      };
-    }
-  }
-
-  // Get division leaderboard
-  async getDivisionLeaderboard(divisionId, limit = 10) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/${divisionId}/leaderboard?limit=${limit}`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to get leaderboard:', error);
-      // Return fallback data
-      return [];
-    }
-  }
-
-  // Get division games
-  async getDivisionGames(divisionId) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/${divisionId}/games`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to get division games:', error);
-      throw error;
-    }
-  }
-
-  // Join division
-  async joinDivision(divisionId) {
-    try {
-      const response = await apiClient.post(`${this.baseUrl}/${divisionId}/join`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to join division:', error);
-      throw error;
-    }
-  }
-
-  // Leave division
-  async leaveDivision(divisionId) {
-    try {
-      const response = await apiClient.post(`${this.baseUrl}/${divisionId}/leave`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to leave division:', error);
-      throw error;
-    }
-  }
-
-  // Get division tournaments
-  async getDivisionTournaments(divisionId) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/${divisionId}/tournaments`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to get tournaments:', error);
-      // Return fallback data
-      return [];
-    }
-  }
-
-  // Check if division is active
-  async isDivisionActive(divisionId) {
-    try {
-      const divisions = await this.getAllDivisions();
-      const division = divisions.find(d => d.id === divisionId);
-      return division ? division.isActive : false;
-    } catch (error) {
-      console.error('Failed to check division status:', error);
-      return false;
-    }
-  }
-
-  // Get division settings
-  async getDivisionSettings(divisionId) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/${divisionId}/settings`);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to get division settings:', error);
-      // Return default settings
-      return {
-        maxTeamSize: 5,
-        minTeamSize: 1,
-        allowedGameModes: ['ranked', 'casual', 'tournament'],
-        skillRatingEnabled: true,
-        divisionTiers: ['bronze', 'silver', 'gold', 'platinum', 'diamond']
-      };
     }
   }
 }

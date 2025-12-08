@@ -1,6 +1,7 @@
 /**
  * MobaHomeScreen.js
  * Base/Markas Tim MOBA (Versi Stabil - Tanpa Gambar Online)
+ * Updated: Tombol Menu kembali ke MainHub (Dorm)
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -8,7 +9,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Dimensions,
   Alert,
 } from 'react-native';
@@ -35,19 +35,26 @@ export default function MobaHomeScreen({ navigation }) {
     setIsWeekend(gameDate.day >= 6);
   }, [gameDate]);
 
-  // Fungsi Logika Tombol Back
+  // --- FUNGSI NAVIGASI TOMBOL MENU ---
   const handleBackToMenu = () => {
     Alert.alert(
-      "Exit Division",
-      "Return to division selection?",
+      "Back to Dorm",
+      "Are you sure you want to leave the MOBA Division?",
       [
         { text: "Cancel", style: "cancel" },
         { 
-          text: "Exit", 
+          text: "Leave", 
           style: "destructive",
           onPress: () => {
-            console.log("Exiting division...");
-            exitDivision(); 
+            console.log("Exiting division to Dorm...");
+            exitDivision(); // Reset state divisi di context
+            
+            // Navigasi paksa ke screen 'MainHub' (Dorm)
+            // Kita reset stack agar tidak bisa di-back ke sini lagi
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'MainHub' }],
+            });
           }
         }
       ]
@@ -56,6 +63,7 @@ export default function MobaHomeScreen({ navigation }) {
 
   const handleNextDay = () => {
     if (isWeekend) {
+      // Navigasi ke screen Draft (MobaDraftScreen)
       navigation.navigate('MobaDraft');
     } else {
       setGameDate(prev => {
@@ -63,7 +71,7 @@ export default function MobaHomeScreen({ navigation }) {
         if (nextDay > 7) return { week: prev.week + 1, day: 1 };
         return { ...prev, day: nextDay };
       });
-      Alert.alert("Day Passed", "Training completed.");
+      Alert.alert("Day Passed", "Training completed for today.");
     }
   };
 
@@ -87,7 +95,7 @@ export default function MobaHomeScreen({ navigation }) {
       {/* 1. TOP HUD */}
       <View style={styles.topHud}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBackToMenu}>
-          <Text style={styles.backText}>◀ MENU</Text>
+          <Text style={styles.backText}>◀ DORM</Text>
         </TouchableOpacity>
 
         <View style={styles.dateBox}>
@@ -101,7 +109,7 @@ export default function MobaHomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* 2. HOUSE VIEW (Diganti View biasa, bukan ImageBackground) */}
+      {/* 2. HOUSE VIEW */}
       <View style={styles.houseArea}>
         <View style={styles.houseBg}> 
           <View style={styles.building}>
@@ -158,7 +166,7 @@ const styles = StyleSheet.create({
   resBox: { flexDirection: 'row', gap: 10 },
   resText: { color: '#fbbf24', fontSize: 12, fontWeight: 'bold' },
   
-  // House (Diperbaiki)
+  // House
   houseArea: { flex: 1, backgroundColor: '#1e293b' }, // Fallback color
   houseBg: { flex: 1, justifyContent: 'flex-end', paddingBottom: 20 },
   building: { marginHorizontal: 20, borderWidth: 2, borderColor: '#475569', backgroundColor: 'rgba(15, 23, 42, 0.9)', borderRadius: 8, overflow: 'hidden' },
@@ -166,7 +174,7 @@ const styles = StyleSheet.create({
   roomName: { position: 'absolute', top: 2, left: 5, color: '#64748b', fontSize: 8, fontWeight: 'bold' },
   roomContent: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: '100%', paddingBottom: 5 },
   
-  // Avatar (Diperbaiki - Tanpa Gambar Online)
+  // Avatar
   avatarContainer: { alignItems: 'center' },
   avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#fff', backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
   avatarInitial: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
