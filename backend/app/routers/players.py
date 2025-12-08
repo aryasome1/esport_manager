@@ -1,12 +1,14 @@
 """
 Player Management Router
 Handles player CRUD operations, hero stats, team assignments, and analytics
+FIXED: Includes signature_hero_image logic and complete CRUD operations
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, desc
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 import logging
 
 from ..database import get_db
@@ -18,7 +20,8 @@ from ..schemas.schemas import (
     PaginationParams, PaginatedResponse, BaseResponse, ErrorResponse
 )
 
-router = APIRouter(prefix="/players", tags=["Players"])
+# Prefix sudah di-set di main.py (/api/players)
+router = APIRouter(tags=["Players"])
 logger = logging.getLogger(__name__)
 
 def get_player_or_404(db: Session, player_id: int) -> Player:
@@ -42,7 +45,8 @@ async def get_players(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Get all players with optional filtering and pagination
+    Get all players with optional filtering and pagination.
+    Includes signature_hero_image for UI display.
     """
     try:
         query = db.query(Player)
@@ -58,7 +62,7 @@ async def get_players(
             search_filter = or_(
                 Player.name.ilike(f"%{search}%"),
                 Player.email.ilike(f"%{search}%"),
-                Player.username.ilike(f"%{search}%")
+                Player.name.ilike(f"%{search}%")
             )
             query = query.filter(search_filter)
         
@@ -68,11 +72,43 @@ async def get_players(
         # Apply pagination and ordering
         players = query.order_by(Player.ovr.desc()).offset(skip).limit(limit).all()
         
+        # [LOGIC BARU] Attach Signature Hero Image
+        player_items = []
+        for p in players:
+            # Convert SQLAlchemy model to dict using Pydantic validation first
+            p_data = PlayerSchema.model_validate(p)
+            p_dict = p_data.model_dump()
+            
+            # Find best hero (highest power) for this player
+            best_stat = db.query(HeroStat).filter(HeroStat.player_id == p.id)\
+                .order_by(desc(HeroStat.hero_power)).first()
+            
+            signature_image = None
+            signature_hero_name = None
+            
+            if best_stat:
+                # Fetch hero details to get image
+                hero = db.query(Hero).filter(Hero.id == best_stat.hero_id).first()
+                if hero:
+                    signature_image = hero.image_url
+                    signature_hero_name = hero.name
+            
+            # Fallback image if no hero played yet or no image found
+            if not signature_image:
+                # Use UI Avatar generator as fallback
+                signature_image = f"https://ui-avatars.com/api/?name={p.name}&background=random&color=fff&size=200"
+            
+            # Inject custom fields into the dictionary
+            p_dict['signature_hero_image'] = signature_image
+            p_dict['signature_hero_name'] = signature_hero_name
+            
+            player_items.append(p_dict)
+        
         # Calculate pagination info
         pages = (total + limit - 1) // limit
         
         return PaginatedResponse(
-            items=players,
+            items=player_items,
             total=total,
             page=(skip // limit) + 1,
             size=limit,
@@ -85,7 +121,7 @@ async def get_players(
         logger.error(f"Error fetching players: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch players"
+            detail=f"Failed to fetch players: {str(e)}"
         )
 
 @router.get("/{player_id}", response_model=PlayerWithHeroStats)
@@ -101,12 +137,34 @@ async def get_player(
         player = get_player_or_404(db, player_id)
         
         # Get player with relationships
-        player_with_stats = db.query(Player).filter(Player.id == player_id).first()
         hero_stats = db.query(HeroStat).filter(HeroStat.player_id == player_id).all()
         
+        # Manual construct response data dictionary to be safe
         response_data = {
-            **player_with_stats.__dict__,
-            'hero_stats': hero_stats
+            "id": player.id,
+            "name": player.name,
+            "email": player.email,
+            "username": player.username,
+            "ovr": player.ovr,
+            "focus": player.focus,
+            "mental": player.mental,
+            "fatigue": player.fatigue,
+            "current_role": player.current_role,
+            "team_id": player.team_id,
+            "experience_level": player.experience_level,
+            "training_hours": player.training_hours,
+            "division_preference": player.division_preference,
+            # Stats specific
+            "moba_laning_skill": player.moba_laning_skill,
+            "moba_teamfight_presence": player.moba_teamfight_presence,
+            "tactical_aim": player.tactical_aim,
+            "tactical_gamesense": player.tactical_gamesense,
+            "is_active": player.is_active,
+            "created_at": player.created_at,
+            "updated_at": player.updated_at,
+            # Relations
+            "hero_stats": hero_stats,
+            "team": player.team
         }
         
         return PlayerWithHeroStats(**response_data)
@@ -142,9 +200,9 @@ async def create_player(
         db_player = Player(
             name=player_data.name,
             email=player_data.email,
-            username=player_data.username,
-            current_role=player_data.current_role,
-            division_preference=player_data.division_preference.value if player_data.division_preference else "moba"
+            username=getattr(player_data, 'username', None),
+            current_role=getattr(player_data, 'current_role', None),
+            division_preference=getattr(player_data, 'division_preference', 'moba')
         )
         
         db.add(db_player)
@@ -180,7 +238,8 @@ async def update_player(
         
         # Update fields
         for field, value in update_data.items():
-            setattr(player, field, value)
+            if hasattr(player, field):
+                setattr(player, field, value)
         
         player.updated_at = datetime.utcnow()
         
@@ -315,8 +374,13 @@ async def update_hero_stat(
         update_data = stat_update.dict(exclude_unset=True)
         
         for field, value in update_data.items():
-            setattr(hero_stat, field, value)
+            if hasattr(hero_stat, field):
+                setattr(hero_stat, field, value)
         
+        # Update timestamp
+        if hasattr(hero_stat, 'last_played'):
+            hero_stat.last_played = datetime.utcnow()
+
         db.commit()
         db.refresh(hero_stat)
         
@@ -427,6 +491,3 @@ async def get_player_analytics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch player analytics"
         )
-
-# Import datetime for updated_at
-from datetime import datetime

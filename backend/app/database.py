@@ -3,6 +3,7 @@ Database configuration and session management for eSports Manager
 """
 
 import os
+from dotenv import load_dotenv
 from typing import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
@@ -13,14 +14,14 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+load_dotenv()
 # Get database configuration from environment variables
-DB_CONNECTION = os.getenv("DB_CONNECTION", "sqlite")
-DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_DATABASE = os.getenv("DB_DATABASE", "esport_manager")
-DB_USERNAME = os.getenv("DB_USERNAME", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "aryaaaaa")
+DB_CONNECTION = os.getenv("DB_CONNECTION")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_DATABASE = os.getenv("DB_DATABASE")
+DB_USERNAME = os.getenv("DB_USERNAME")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 # Construct database URL based on connection type
 if DB_CONNECTION.lower() == "pgsql":
