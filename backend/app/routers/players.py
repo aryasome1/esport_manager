@@ -1,7 +1,7 @@
 """
 Player Management Router
-Handles player CRUD operations, hero stats, team assignments, and analytics
-FIXED: Includes signature_hero_image logic and complete CRUD operations
+FIXED: Removed dependency on specific Enum attributes for division filtering.
+Now uses string literals 'moba' and 'tactical' to match Database values directly.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -14,6 +14,8 @@ import logging
 from ..database import get_db
 from ..utils.auth_utils import get_current_active_user
 from ..models.models import Player, Hero, HeroStat, Team, User
+# [NOTE] DivisionType import is kept for schema usage but not for filtering logic to avoid AttributeErrors
+from ..models.division_models import DivisionType
 from ..schemas.schemas import (
     PlayerCreate, PlayerUpdate, Player as PlayerSchema,
     PlayerWithHeroStats, HeroStatCreate, HeroStatUpdate, HeroStatResponse,
@@ -41,6 +43,7 @@ async def get_players(
     team_id: Optional[int] = Query(None),
     role: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    division: Optional[str] = Query(None, description="Filter by division: 'moba' or 'tactical'"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -57,12 +60,22 @@ async def get_players(
         
         if role:
             query = query.filter(Player.current_role == role)
+            
+        # [FIXED LOGIC] Use string literals to match DB values directly
+        if division:
+            div_lower = division.lower()
+            if div_lower == 'moba':
+                # Filter 'moba'
+                query = query.filter(Player.division_preference == 'moba')
+            elif div_lower in ['tactical', 'valorant', 'fps']:
+                # Filter 'tactical' (matches DB value from schema)
+                query = query.filter(Player.division_preference == 'tactical')
         
         if search:
             search_filter = or_(
                 Player.name.ilike(f"%{search}%"),
                 Player.email.ilike(f"%{search}%"),
-                Player.name.ilike(f"%{search}%")
+                Player.username.ilike(f"%{search}%")
             )
             query = query.filter(search_filter)
         
@@ -72,12 +85,23 @@ async def get_players(
         # Apply pagination and ordering
         players = query.order_by(Player.ovr.desc()).offset(skip).limit(limit).all()
         
-        # [LOGIC BARU] Attach Signature Hero Image
+        # Attach Signature Hero Image Logic
         player_items = []
         for p in players:
             # Convert SQLAlchemy model to dict using Pydantic validation first
-            p_data = PlayerSchema.model_validate(p)
-            p_dict = p_data.model_dump()
+            try:
+                p_data = PlayerSchema.model_validate(p)
+                p_dict = p_data.model_dump()
+            except Exception as e:
+                # Fallback if validation fails, try manual dict creation
+                p_dict = {
+                    "id": p.id,
+                    "name": p.name,
+                    "email": p.email,
+                    "ovr": p.ovr,
+                    "division_preference": p.division_preference,
+                    # Add minimum required fields
+                }
             
             # Find best hero (highest power) for this player
             best_stat = db.query(HeroStat).filter(HeroStat.player_id == p.id)\
@@ -119,6 +143,9 @@ async def get_players(
         
     except Exception as e:
         logger.error(f"Error fetching players: {e}")
+        # Print stack trace for easier debugging
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch players: {str(e)}"

@@ -22,7 +22,7 @@ export default function TacticalMatchScreen({ navigation }) {
   const loadMatches = async () => {
     try {
       // Fetch matches (bisa ditambah filter division_type=valorant jika backend support)
-      const response = await apiClient.get('/api/matches/');
+      const response = await apiClient.get('/api/matches/?division=tactical');
       if (response.data && response.data.items) {
         setMatches(response.data.items);
       }

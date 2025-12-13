@@ -32,7 +32,7 @@ export default function MobaScheduleScreen({ navigation }) {
     try {
       // Fetch matches (sesuaikan endpoint jika perlu filtering by division)
       // Kita ambil semua dulu lalu filter di client atau tambah param ?status=...
-      const response = await apiClient.get('/api/matches/');
+      const response = await apiClient.get('/api/matches/?division=moba');
       if (response.data && response.data.items) {
         setMatches(response.data.items);
       }

@@ -33,7 +33,7 @@ export default function TacticalTeamScreen({ navigation }) {
   const loadTeamData = async () => {
     try {
       const teamId = user?.team_id || 1;
-      const response = await apiClient.get(`/api/players/?team_id=${teamId}`);
+      const response = await apiClient.get(`/api/players/?team_id=${teamId}&division=tactical`);
       if (response.data && response.data.items) {
         const formatted = response.data.items.map(p => ({
             ...p,
