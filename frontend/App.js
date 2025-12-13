@@ -261,7 +261,7 @@ function MainHubNavigator() {
       ) : (
         <Stack.Screen name="MainHub" component={MainHubScreen} />
       )}
-
+      <Stack.Screen name="Profile" component={ProfileScreen} /> 
       <Stack.Screen name="DivisionSelect">
         {(props) => (
           <DivisionSelectionScreen 

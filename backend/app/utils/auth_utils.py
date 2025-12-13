@@ -1,7 +1,7 @@
 """
 Authentication utilities for eSports Manager
-JWT token handling, password hashing, and user verification
-FIXED: Added missing functions (get_user_id_from_token) and Dependency Injection
+JWT token handling, password hashing, user verification, and authentication logic.
+FIXED: Added missing 'authenticate_user' function to resolve ImportError.
 """
 
 import os
@@ -34,6 +34,7 @@ class AuthenticationError(Exception):
     pass
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify plain password against hashed password"""
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except Exception as e:
@@ -41,6 +42,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 def get_password_hash(password: str) -> str:
+    """Hash a password"""
     try:
         return pwd_context.hash(password)
     except Exception as e:
@@ -48,6 +50,7 @@ def get_password_hash(password: str) -> str:
         raise AuthenticationError("Failed to hash password")
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """Create JWT access token"""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -70,6 +73,7 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 def create_refresh_token(data: Dict[str, Any]) -> str:
+    """Create refresh token (longer expiry)"""
     expires_delta = timedelta(days=30)
     to_encode = data.copy()
     expire = datetime.utcnow() + expires_delta
@@ -81,7 +85,24 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
         logger.error(f"Refresh token creation error: {e}")
         raise AuthenticationError("Failed to create refresh token")
 
-# --- RESTORED UTILITY FUNCTIONS ---
+# --- MISSING FUNCTION RESTORED ---
+
+def authenticate_user(db: Session, email: str, password: str):
+    """
+    Authenticate a user by email and password.
+    Returns the user object if successful, False otherwise.
+    """
+    # Import User locally to avoid circular import
+    from ..models.models import User
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return False
+    if not verify_password(password, user.password_hash):
+        return False
+    return user
+
+# --- UTILITY FUNCTIONS ---
 
 def get_user_id_from_token(token: str) -> Optional[str]:
     """Extract user ID from token without full validation"""
@@ -136,21 +157,21 @@ def get_current_user(
         if payload is None:
             raise credentials_exception
             
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        user_email: str = payload.get("sub") # Usually 'sub' is email/username in our create_access_token
+        if user_email is None:
             raise credentials_exception
-        token_data = TokenData(user_id=int(user_id))
+        
     except Exception as e:
         logger.warning(f"Token validation failed: {e}")
         raise credentials_exception
     
-    user = db.query(User).filter(User.id == token_data.user_id).first()
+    # Fetch user by email (since 'sub' stores email)
+    user = db.query(User).filter(User.email == user_email).first()
     if user is None:
         raise credentials_exception
     
     return user
 
-# [FIX] Dependency Injection Corrected
 def get_current_active_user(
     current_user = Depends(get_current_user)
 ):
@@ -186,7 +207,6 @@ async def verify_websocket_token(websocket):
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token content")
         
-        # Return simple object for WebSocket usage
         class SimpleUser:
             def __init__(self, id):
                 self.id = id

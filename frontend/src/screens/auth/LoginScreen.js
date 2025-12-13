@@ -1,31 +1,30 @@
-/**
- * Login Screen
- * User authentication interface
- */
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  TextInput,
   TouchableOpacity,
-  Alert,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
+  StatusBar,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-
-// Theme
-import { theme } from '../../theme/theme';
-
-// Services
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 
-export default function LoginScreen({ navigation }) {
+// Import komponen reusable
+import AuthInput from '../../components/common/AuthInput';
+import AuthButton from '../../components/common/AuthButton';
+
+const LoginScreen = () => {
+  const navigation = useNavigation();
   const { login } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -33,164 +32,156 @@ export default function LoginScreen({ navigation }) {
       return;
     }
 
-    setLoading(true);
+    setIsLoading(true);
     try {
+      // Panggil fungsi login dari Context
       const result = await login(email, password);
       
       if (result.success) {
-        // Navigation will be handled by AuthContext/App.js
-        // The app will automatically navigate to division selection
+        console.log("Login Success! Waiting for App.js to switch navigator...");
+        // [FIX] JANGAN NAVIGASI MANUAL DI SINI.
+        // Biarkan App.js mendeteksi perubahan user dan mengganti stack secara otomatis.
       } else {
-        Alert.alert('Login Failed', result.error || 'Please check your credentials and try again.');
+        // Error sudah di-alert di AuthContext, tapi boleh double check
       }
     } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Error', error.message || 'Login failed. Please try again.');
+      console.error("Login Screen Error:", error);
+      Alert.alert('Error', 'An unexpected error occurred during login.');
     } finally {
-      setLoading(false);
+      // Kita set loading false hanya jika gagal. 
+      // Jika sukses, komponen ini akan unmount, jadi state update tidak masalah (atau bisa dicek mounted).
+      setIsLoading(false); 
     }
-  };
-
-  const handleRegister = () => {
-    navigation.navigate('Register');
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
     >
+      <StatusBar barStyle="light-content" />
+      
+      {/* Background Premium */}
       <LinearGradient
-        colors={[theme.colors.primary.main, theme.colors.accent.purple]}
-        style={styles.gradient}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to your account</Text>
-        </View>
+        colors={['#0f172a', '#1e293b', '#0f172a']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <LinearGradient
+          colors={['rgba(245, 158, 11, 0.1)', 'transparent']}
+          style={[StyleSheet.absoluteFillObject, { top: -300, transform: [{ rotate: '-30deg' }] }]}
+      />
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.contentContainer}>
+          
+          <View style={styles.headerContainer}>
+            <Text style={styles.titleText}>Welcome Back</Text>
+            <Text style={styles.subtitleText}>Sign in to manage your team.</Text>
+          </View>
+
+          {/* Form Container */}
+          <View style={styles.formContainer}>
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Email Address"
               value={email}
               onChangeText={setEmail}
-              placeholder="Enter your email"
-              placeholderTextColor={theme.colors.text.tertiary}
               keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
             />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
+            <AuthInput
+              icon="lock-closed-outline"
+              placeholder="Password"
               value={password}
               onChangeText={setPassword}
-              placeholder="Enter your password"
-              placeholderTextColor={theme.colors.text.tertiary}
               secureTextEntry
+            />
+
+            <TouchableOpacity style={styles.forgotPassword} activeOpacity={0.7}>
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+
+            <AuthButton 
+                title={isLoading ? "SIGNING IN..." : "LOGIN"} 
+                onPress={handleLogin} 
+                isLoading={isLoading}
             />
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.disabledButton]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Signing In...' : 'Sign In'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={handleRegister}
-          >
-            <Text style={styles.registerText}>
-              Don't have an account? <Text style={styles.registerLink}>Sign Up</Text>
-            </Text>
-          </TouchableOpacity>
+          {/* Register Link */}
+          <View style={styles.footerContainer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')} activeOpacity={0.7}>
+              <Text style={styles.linkText}>Register Now</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </LinearGradient>
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0f172a',
   },
-  gradient: {
+  safeArea: {
     flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 100,
   },
-  header: {
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  headerContainer: {
+    marginBottom: 40,
     alignItems: 'center',
-    marginBottom: 50,
   },
-  title: {
+  titleText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: theme.colors.text.inverse,
+    fontWeight: '800',
+    color: '#ffffff',
     marginBottom: 10,
+    letterSpacing: 1,
+    textShadowColor: 'rgba(245, 158, 11, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
-  subtitle: {
+  subtitleText: {
     fontSize: 16,
-    color: theme.colors.text.secondary,
+    color: '#94a3b8',
   },
-  form: {
-    flex: 1,
+  formContainer: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 24,
   },
-  inputContainer: {
-    marginBottom: 20,
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
   },
-  label: {
+  forgotPasswordText: {
+    color: '#facc15',
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.text.inverse,
-    marginBottom: 8,
   },
-  input: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: theme.colors.text.primary,
-    borderWidth: 1,
-    borderColor: theme.colors.border.light,
+  footerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 16,
   },
-  button: {
-    backgroundColor: theme.colors.accent.gold,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text.inverse,
-  },
-  registerButton: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingVertical: 16,
-  },
-  registerText: {
+  footerText: {
+    color: '#94a3b8',
     fontSize: 14,
-    color: theme.colors.text.secondary,
   },
-  registerLink: {
-    color: theme.colors.accent.gold,
+  linkText: {
+    color: '#facc15',
+    fontSize: 14,
     fontWeight: 'bold',
   },
 });
+
+export default LoginScreen;

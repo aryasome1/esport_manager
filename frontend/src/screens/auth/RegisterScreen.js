@@ -1,256 +1,207 @@
-/**
- * Register Screen
- * User registration interface
- */
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  TextInput,
   TouchableOpacity,
-  Alert,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
+  SafeAreaView,
+  StatusBar,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../contexts/AuthContext'; // Import Logic Auth
 
-// Theme
-import { theme } from '../../theme/theme';
+// Pastikan komponen ini ada (kita sudah buat sebelumnya)
+import AuthInput from '../../components/common/AuthInput';
+import AuthButton from '../../components/common/AuthButton';
 
-// Services
-import { useAuth } from '../../contexts/AuthContext';
+const RegisterScreen = () => {
+  const navigation = useNavigation();
+  const { register } = useAuth(); // Pakai fungsi register dari AuthContext
 
-export default function RegisterScreen({ navigation }) {
-  const { register } = useAuth();
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [loading, setLoading] = useState(false);
-
-  const updateFormData = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleRegister = async () => {
-    const { username, email, password, confirmPassword } = formData;
-
+    // 1. Validasi Input
     if (!username || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+        Alert.alert('Error', 'Please fill in all fields');
+        return;
     }
-
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return;
+        Alert.alert('Error', 'Passwords do not match');
+        return;
     }
-
-    if (username.length < 3) {
-      Alert.alert('Error', 'Username must be at least 3 characters');
-      return;
-    }
-
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters');
-      return;
+        Alert.alert('Error', 'Password must be at least 8 characters');
+        return;
     }
 
-    setLoading(true);
+    setIsLoading(true);
+
     try {
-      const result = await register({
-        username,
-        email,
-        password,
-      });
+        // 2. Panggil API Register via Context
+        const result = await register({
+            username,
+            email,
+            password
+        });
 
-      if (result.success) {
-        Alert.alert('Success', 'Account created successfully!');
-        navigation.navigate('Login');
-      } else {
-        Alert.alert('Registration Failed', result.error || 'Please try again.');
-      }
+        if (result.success) {
+            Alert.alert(
+                'Success', 
+                'Account created successfully!', 
+                [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+            );
+        } else {
+            // Error ditangani di Context, tapi kita alert lagi untuk safety
+            // Alert.alert('Registration Failed', result.error); 
+        }
     } catch (error) {
-      console.error('Registration error:', error);
-      Alert.alert('Error', error.message || 'Registration failed. Please try again.');
+        console.error("Register Screen Error:", error);
+        Alert.alert('Error', 'An unexpected error occurred.');
     } finally {
-      setLoading(false);
+        setIsLoading(false);
     }
-  };
-
-  const handleLogin = () => {
-    navigation.navigate('Login');
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
     >
+      <StatusBar barStyle="light-content" />
+      
+      {/* --- BACKGROUND PREMIUM --- */}
       <LinearGradient
-        colors={[theme.colors.accent.purple, theme.colors.primary.main]}
-        style={styles.gradient}
-      >
-        <ScrollView style={styles.scrollContainer}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join the eSports Manager</Text>
+        colors={['#0f172a', '#1e293b', '#0f172a']}
+        style={StyleSheet.absoluteFillObject}
+      />
+       <LinearGradient
+          colors={['rgba(245, 158, 11, 0.1)', 'transparent']}
+          style={[StyleSheet.absoluteFillObject, { top: -300, transform: [{ rotate: '-30deg' }] }]}
+        />
+
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.contentContainer}>
+          
+          {/* --- HEADER --- */}
+          <View style={styles.headerContainer}>
+            <Text style={styles.titleText}>Esport Manager</Text>
+            <Text style={styles.subtitleText}>Start your journey here.</Text>
           </View>
 
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Username</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.username}
-                onChangeText={(value) => updateFormData('username', value)}
-                placeholder="Choose a username"
-                placeholderTextColor={theme.colors.text.tertiary}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+          {/* --- FORM CONTAINER (GLASSMORPHISM) --- */}
+          <View style={styles.formContainer}>
+            <AuthInput
+              icon="person-outline"
+              placeholder="Username"
+              value={username}
+              onChangeText={setUsername}
+            />
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Email Address"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+            />
+            <AuthInput
+              icon="lock-closed-outline"
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+            <AuthInput
+              icon="lock-closed-outline"
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.email}
-                onChangeText={(value) => updateFormData('email', value)}
-                placeholder="Enter your email"
-                placeholderTextColor={theme.colors.text.tertiary}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+            <AuthButton 
+                title={isLoading ? "CREATING..." : "CREATE ACCOUNT"}
+                onPress={handleRegister} 
+                isLoading={isLoading}
+            />
+          </View>
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.password}
-                onChangeText={(value) => updateFormData('password', value)}
-                placeholder="Create a password"
-                placeholderTextColor={theme.colors.text.tertiary}
-                secureTextEntry
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.confirmPassword}
-                onChangeText={(value) => updateFormData('confirmPassword', value)}
-                placeholder="Confirm your password"
-                placeholderTextColor={theme.colors.text.tertiary}
-                secureTextEntry
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.disabledButton]}
-              onPress={handleRegister}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? 'Creating Account...' : 'Create Account'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.loginButton}
-              onPress={handleLogin}
-            >
-              <Text style={styles.loginText}>
-                Already have an account? <Text style={styles.loginLink}>Sign In</Text>
-              </Text>
+          {/* --- FOOTER LINK --- */}
+          <View style={styles.footerContainer}>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.7}>
+              <Text style={styles.linkText}>Login Here</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </LinearGradient>
+        </View>
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0f172a',
   },
-  gradient: {
+  safeArea: {
     flex: 1,
   },
-  scrollContainer: {
+  contentContainer: {
     flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 80,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 20,
   },
-  header: {
+  headerContainer: {
+    marginBottom: 30,
     alignItems: 'center',
-    marginBottom: 40,
   },
-  title: {
+  titleText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: theme.colors.text.inverse,
+    fontWeight: '800',
+    color: '#ffffff',
     marginBottom: 10,
+    letterSpacing: 1,
+    textShadowColor: 'rgba(245, 158, 11, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
-  subtitle: {
+  subtitleText: {
     fontSize: 16,
-    color: theme.colors.text.secondary,
+    color: '#94a3b8',
   },
-  form: {
-    paddingBottom: 50,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text.inverse,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: theme.colors.text.primary,
+  formContainer: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)', // Efek kaca gelap
+    padding: 24,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: theme.colors.border.light,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 24,
   },
-  button: {
-    backgroundColor: theme.colors.accent.gold,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 30,
+  footerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 16,
   },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text.inverse,
-  },
-  loginButton: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingVertical: 16,
-  },
-  loginText: {
+  footerText: {
+    color: '#94a3b8',
     fontSize: 14,
-    color: theme.colors.text.secondary,
   },
-  loginLink: {
-    color: theme.colors.accent.gold,
+  linkText: {
+    color: '#facc15', // Warna Emas
+    fontSize: 14,
     fontWeight: 'bold',
   },
 });
+
+export default RegisterScreen;

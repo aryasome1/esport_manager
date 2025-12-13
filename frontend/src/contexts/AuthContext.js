@@ -1,6 +1,6 @@
 /**
  * Auth Context
- * Provides authentication state and methods
+ * Provides authentication state and methods with Debugging Logs
  */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Alert } from 'react-native';
@@ -22,31 +22,30 @@ export const AuthProvider = ({ children, onLogin, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check if user is authenticated on app start
+  // Check auth on app start
   useEffect(() => {
     checkAuthStatus();
   }, []);
 
-  // Check authentication status
   const checkAuthStatus = async () => {
     try {
       const token = await AsyncStorage.getItem('auth_token');
       if (token) {
         try {
-          // Verify token with server and load profile
+          console.log('[AUTH] Verifying token...'); // [DEBUG]
           const response = await apiClient.get('/api/auth/me');
-          // Backend returns the user object directly
           setUser(response.data);
           setIsAuthenticated(true);
+          console.log('[AUTH] Token verified, User loaded:', response.data.username); // [DEBUG]
         } catch (error) {
-          // Token invalid, clear it
+          console.log('[AUTH] Token invalid, clearing...'); // [DEBUG]
           await AsyncStorage.removeItem('auth_token');
           setUser(null);
           setIsAuthenticated(false);
         }
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error('[AUTH] Auth check failed:', error);
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -54,89 +53,49 @@ export const AuthProvider = ({ children, onLogin, onLogout }) => {
     }
   };
 
-  // Login
-  const login = async (email, password) => {
-    try {
-      setLoading(true);
-      const response = await apiClient.post('/api/auth/login', {
-        email,
-        password
-      });
-
-      const { access_token } = response.data;
-      
-      // Store token
-      await AsyncStorage.setItem('auth_token', access_token);
-      
-      // Load current user profile using the new token
-      try {
-        const me = await apiClient.get('/api/auth/me');
-        setUser(me.data);
-      } catch (e) {
-        // If fetching profile fails, keep user null but remain authenticated
-        setUser(null);
-      }
-      setIsAuthenticated(true);
-      
-      // Call onLogin callback if provided
-      if (onLogin) {
-        onLogin(access_token);
-      }
-      
-      return { success: true };
-    } catch (error) {
-      const errorMessage =
-        error?.data?.detail ||
-        error?.data?.message ||
-        error?.data?.error ||
-        (Array.isArray(error?.data) && error.data[0]?.msg) ||
-        error.message ||
-        'Login failed';
-      Alert.alert('Login Error', errorMessage);
-      return { success: false, error: errorMessage };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Register
+  // REGISTER
   const register = async (userData) => {
+    console.log('[AUTH] Registering user:', userData); // [DEBUG]
     try {
       setLoading(true);
+      
+      // Kirim Request ke Backend
+      console.log('[AUTH] Sending API request to /api/auth/register...'); // [DEBUG]
       const response = await apiClient.post('/api/auth/register', userData);
+      console.log('[AUTH] API Response received:', response.data); // [DEBUG]
 
       const { user: newUser, access_token } = response.data;
       
-      // Store token
+      // Simpan Token
       await AsyncStorage.setItem('auth_token', access_token);
       
-      // Prefer using server-returned user if present; otherwise fetch /me
+      // Update State
       if (newUser) {
+        console.log('[AUTH] Setting user state:', newUser); // [DEBUG]
         setUser(newUser);
       } else {
-        try {
-          const me = await apiClient.get('/api/auth/me');
-          setUser(me.data);
-        } catch (e) {
-          setUser(null);
-        }
+        // Fallback fetch /me jika user object kosong
+        const me = await apiClient.get('/api/auth/me');
+        setUser(me.data);
       }
+      
       setIsAuthenticated(true);
       
-      // Call onLogin callback if provided
-      if (onLogin) {
-        onLogin(access_token);
-      }
+      if (onLogin) onLogin(access_token);
       
       return { success: true };
+
     } catch (error) {
-      const errorMessage =
-        error?.data?.detail ||
-        error?.data?.message ||
-        error?.data?.error ||
-        (Array.isArray(error?.data) && error.data[0]?.msg) ||
-        error.message ||
-        'Registration failed';
+      console.error('[AUTH] Registration Exception:', error); // [DEBUG]
+      
+      let errorMessage = 'Registration failed';
+      if (error?.data?.detail) {
+        errorMessage = error.data.detail;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      console.log('[AUTH] Error Message to user:', errorMessage); // [DEBUG]
       Alert.alert('Registration Error', errorMessage);
       return { success: false, error: errorMessage };
     } finally {
@@ -144,41 +103,76 @@ export const AuthProvider = ({ children, onLogin, onLogout }) => {
     }
   };
 
-  // Logout
-  const logout = async () => {
+  // LOGIN
+  const login = async (email, password) => {
+    console.log('[AUTH] Logging in:', email); // [DEBUG]
     try {
-      // Call logout endpoint if needed
+      setLoading(true);
+      
+      // Kirim Request
+      const response = await apiClient.post('/api/auth/login', {
+        email,
+        password
+      });
+      console.log('[AUTH] Login Success'); // [DEBUG]
+
+      const { access_token } = response.data;
+      
+      await AsyncStorage.setItem('auth_token', access_token);
+      
+      try {
+        const me = await apiClient.get('/api/auth/me');
+        setUser(me.data);
+      } catch (e) {
+        console.error('[AUTH] Failed to fetch profile after login', e);
+        setUser(null);
+      }
+      
+      setIsAuthenticated(true);
+      if (onLogin) onLogin(access_token);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('[AUTH] Login Failed:', error); // [DEBUG]
+      
+      let errorMessage = 'Login failed';
+      if (error?.data?.detail) {
+        errorMessage = error.data.detail;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Login Error', errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // LOGOUT
+  const logout = async () => {
+    console.log('[AUTH] Logging out...'); // [DEBUG]
+    try {
       await apiClient.post('/api/auth/logout');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[AUTH] Logout API error (ignoring):', error);
     } finally {
-      // Clear local storage and state
       await AsyncStorage.removeItem('auth_token');
       setUser(null);
       setIsAuthenticated(false);
       setLoading(false);
-      
-      // Call onLogout callback if provided
-      if (onLogout) {
-        onLogout();
-      }
+      if (onLogout) onLogout();
     }
   };
 
-  // Update user profile
+  // UPDATE PROFILE
   const updateProfile = async (profileData) => {
     try {
       const response = await apiClient.put('/api/auth/me', profileData);
       setUser(prev => ({ ...prev, ...response.data }));
       return { success: true };
     } catch (error) {
-      const errorMessage =
-        error?.data?.detail ||
-        error?.data?.message ||
-        error?.data?.error ||
-        (Array.isArray(error?.data) && error.data[0]?.msg) ||
-        error.message ||
-        'Profile update failed';
+      const errorMessage = error?.data?.detail || 'Profile update failed';
       Alert.alert('Update Error', errorMessage);
       return { success: false, error: errorMessage };
     }

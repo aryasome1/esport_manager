@@ -1,145 +1,69 @@
-/**
- * API Client
- * Centralized HTTP client for API requests
- * Configured for PostgreSQL backend
- */
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-class ApiClient {
-  constructor() {
-    // Backend configuration - use environment variable or default to localhost
-    this.baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-    this.client = axios.create({
-      baseURL: this.baseURL,
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Request interceptor
-    this.client.interceptors.request.use(
-      async (config) => {
-        // Add auth token if available
-        const token = await this.getAuthToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    // Response interceptor
-    this.client.interceptors.response.use(
-      (response) => {
-        return response;
-      },
-      (error) => {
-        if (error.response?.status === 401) {
-          // Handle unauthorized
-          this.handleUnauthorized();
-        }
-        return Promise.reject(error);
-      }
-    );
+const getBaseUrl = () => {
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000';
+  } else {
+    // Untuk iOS dan Web
+    return 'http://localhost:8000';
   }
+};
 
-  // Get auth token from storage
-  async getAuthToken() {
+console.log('API Base URL:', getBaseUrl()); // [DEBUG] Cek URL
+
+export const apiClient = axios.create({
+  baseURL: getBaseUrl(),
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+  timeout: 15000, // Naikkan timeout jadi 15 detik
+});
+
+apiClient.interceptors.request.use(
+  async (config) => {
+    console.log(`[REQUEST] ${config.method.toUpperCase()} ${config.url}`, config.data); // [DEBUG]
     try {
       const token = await AsyncStorage.getItem('auth_token');
-      return token || null;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     } catch (error) {
-      console.error('Failed to get auth token:', error);
-      return null;
+      console.error('Error fetching token:', error);
     }
+    return config;
+  },
+  (error) => {
+    console.error('[REQUEST ERROR]', error); // [DEBUG]
+    return Promise.reject(error);
   }
+);
 
-  // Handle unauthorized responses
-  handleUnauthorized() {
-    // In a real app, this would clear auth and redirect to login
-    console.log('Unauthorized access detected');
-  }
-
-  // GET request
-  async get(url, config = {}) {
-    try {
-      const response = await this.client.get(url, config);
-      return response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  // POST request
-  async post(url, data = {}, config = {}) {
-    try {
-      const response = await this.client.post(url, data, config);
-      return response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  // PUT request
-  async put(url, data = {}, config = {}) {
-    try {
-      const response = await this.client.put(url, data, config);
-      return response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  // PATCH request
-  async patch(url, data = {}, config = {}) {
-    try {
-      const response = await this.client.patch(url, data, config);
-      return response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  // DELETE request
-  async delete(url, config = {}) {
-    try {
-      const response = await this.client.delete(url, config);
-      return response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  // Handle API errors
-  handleError(error) {
+apiClient.interceptors.response.use(
+  (response) => {
+    console.log(`[RESPONSE] ${response.status} ${response.config.url}`, response.data); // [DEBUG]
+    return response;
+  },
+  async (error) => {
     if (error.response) {
-      // Server responded with error status
-      return {
-        message: error.response.data?.message || 'Server error',
-        status: error.response.status,
-        data: error.response.data
-      };
+      console.error('[RESPONSE ERROR] Data:', error.response.data); // [DEBUG]
+      console.error('[RESPONSE ERROR] Status:', error.response.status); // [DEBUG]
+      
+      if (error.response.status === 401) {
+        await AsyncStorage.removeItem('auth_token');
+      }
+      return Promise.reject(error.response);
     } else if (error.request) {
-      // Request was made but no response received
-      return {
-        message: 'Network error - no response from server',
-        status: 0,
-        data: null
-      };
+      console.error('[NETWORK ERROR] No response received', error.request); // [DEBUG]
+      return Promise.reject({ 
+        message: 'Network Error. Backend not reachable.',
+        isNetworkError: true 
+      });
     } else {
-      // Something else happened
-      return {
-        message: error.message || 'Unknown error',
-        status: 0,
-        data: null
-      };
+      console.error('[API CONFIG ERROR]', error.message); // [DEBUG]
+      return Promise.reject(error);
     }
   }
-}
-
-export const apiClient = new ApiClient();
+);
