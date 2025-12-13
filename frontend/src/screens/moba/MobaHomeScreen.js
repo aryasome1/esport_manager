@@ -1,194 +1,237 @@
-/**
- * MobaHomeScreen.js
- * Base/Markas Tim MOBA (Versi Stabil - Tanpa Gambar Online)
- * Updated: Tombol Menu kembali ke MainHub (Dorm)
- */
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Dimensions, ActivityIndicator, ImageBackground
 } from 'react-native';
-import { useDivision } from '../../contexts/DivisionContext'; 
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { theme } from '../../theme/theme';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiClient } from '../../services/ApiClient';
 
 const { width } = Dimensions.get('window');
 
-// Data Dummy Pemain
-const TEAM_ROSTER = [
-  { id: 1, name: 'Lemon', role: 'Mid', activity: 'training', energy: 80 },
-  { id: 2, name: 'R7', role: 'Exp', activity: 'sleeping', energy: 40 },
-  { id: 3, name: 'Alberttt', role: 'Jungle', activity: 'training', energy: 90 },
-  { id: 4, name: 'Vyn', role: 'Roam', activity: 'analyzing', energy: 75 },
-  { id: 5, name: 'Skylar', role: 'Gold', activity: 'training', energy: 85 },
-];
-
 export default function MobaHomeScreen({ navigation }) {
-  const { exitDivision } = useDivision(); 
-  const [gameDate, setGameDate] = useState({ week: 1, day: 1 });
-  const [resources, setResources] = useState({ money: 5000, fans: 1200 });
-  const [isWeekend, setIsWeekend] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [teamStats, setTeamStats] = useState({
+    wins: 0,
+    matches: 0,
+    winRate: 0,
+    avgGold: '0k'
+  });
 
   useEffect(() => {
-    setIsWeekend(gameDate.day >= 6);
-  }, [gameDate]);
+    fetchDashboardData();
+  }, []);
 
-  // --- FUNGSI NAVIGASI TOMBOL MENU ---
-  const handleBackToMenu = () => {
-    Alert.alert(
-      "Back to Dorm",
-      "Are you sure you want to leave the MOBA Division?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Leave", 
-          style: "destructive",
-          onPress: () => {
-            console.log("Exiting division to Dorm...");
-            exitDivision(); // Reset state divisi di context
-            
-            // Navigasi paksa ke screen 'MainHub' (Dorm)
-            // Kita reset stack agar tidak bisa di-back ke sini lagi
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'MainHub' }],
-            });
-          }
-        }
-      ]
-    );
-  };
-
-  const handleNextDay = () => {
-    if (isWeekend) {
-      // Navigasi ke screen Draft (MobaDraftScreen)
-      navigation.navigate('MobaDraft');
-    } else {
-      setGameDate(prev => {
-        const nextDay = prev.day + 1;
-        if (nextDay > 7) return { week: prev.week + 1, day: 1 };
-        return { ...prev, day: nextDay };
-      });
-      Alert.alert("Day Passed", "Training completed for today.");
+  const fetchDashboardData = async () => {
+    try {
+      const teamId = user?.team_id || 1;
+      const response = await apiClient.get(`/api/teams/${teamId}`);
+      if (response.data) {
+        const t = response.data;
+        const wr = t.total_matches > 0 
+          ? ((t.wins / t.total_matches) * 100).toFixed(1) 
+          : 0;
+        
+        setTeamStats({
+          wins: t.wins,
+          matches: t.total_matches,
+          winRate: wr,
+          avgGold: '52.4k' // Mock data MOBA specific
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load MOBA dashboard:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getDayName = (day) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1] || 'Mon';
-
-  const PlayerAvatar = ({ player }) => (
-    <TouchableOpacity style={styles.avatarContainer} onPress={() => Alert.alert(player.name, `Role: ${player.role}`)}>
-      <View style={styles.energyBarBg}>
-        <View style={[styles.energyBarFill, { width: `${player.energy}%` }]} />
-      </View>
-      {/* Menggunakan inisial nama sebagai avatar (Offline-safe) */}
-      <View style={styles.avatarPlaceholder}>
-        <Text style={styles.avatarInitial}>{player.name.charAt(0)}</Text>
-      </View>
-      <View style={styles.roleBadge}><Text style={styles.roleText}>{player.role[0]}</Text></View>
+  const MenuCard = ({ title, subtitle, icon, color, onPress }) => (
+    <TouchableOpacity 
+      style={styles.menuCard} 
+      activeOpacity={0.9}
+      onPress={onPress}
+    >
+      <LinearGradient
+        colors={['#1e293b', '#0f172a']}
+        style={styles.menuGradient}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
+          <MaterialCommunityIcons name={icon} size={28} color={color} />
+        </View>
+        <View style={styles.menuContent}>
+          <Text style={styles.menuTitle}>{title}</Text>
+          <Text style={styles.menuSubtitle}>{subtitle}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#475569" style={styles.arrowIcon} />
+      </LinearGradient>
     </TouchableOpacity>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary.main} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* 1. TOP HUD */}
-      <View style={styles.topHud}>
-        <TouchableOpacity style={styles.backBtn} onPress={handleBackToMenu}>
-          <Text style={styles.backText}>◀ DORM</Text>
-        </TouchableOpacity>
-
-        <View style={styles.dateBox}>
-          <View style={styles.weekBadge}><Text style={styles.weekText}>W{gameDate.week}</Text></View>
-          <Text style={[styles.dayText, isWeekend && { color: '#ef4444' }]}>{getDayName(gameDate.day)}</Text>
-        </View>
-
-        <View style={styles.resBox}>
-          <Text style={styles.resText}>💰 {resources.money}</Text>
-          <Text style={styles.resText}>⭐ {resources.fans}</Text>
-        </View>
-      </View>
-
-      {/* 2. HOUSE VIEW */}
-      <View style={styles.houseArea}>
-        <View style={styles.houseBg}> 
-          <View style={styles.building}>
-            {/* Lantai 2: Dorm */}
-            <View style={[styles.floor, { backgroundColor: 'rgba(249, 115, 22, 0.1)' }]}>
-              <Text style={styles.roomName}>REST AREA</Text>
-              <View style={styles.roomContent}>
-                {TEAM_ROSTER.filter(p => ['sleeping', 'analyzing'].includes(p.activity)).map(p => <PlayerAvatar key={p.id} player={p} />)}
-              </View>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: 20 }]}>
+        
+        {/* Header Row */}
+        <View style={styles.headerRow}>
+            <View>
+                <Text style={styles.greeting}>MANAGER</Text>
+                <Text style={styles.username}>{user?.username?.toUpperCase()}</Text>
             </View>
-            {/* Lantai 1: Training */}
-            <View style={[styles.floor, { backgroundColor: 'rgba(59, 130, 246, 0.1)', borderBottomWidth: 0 }]}>
-              <Text style={styles.roomName}>TRAINING ROOM</Text>
-              <View style={styles.roomContent}>
-                {TEAM_ROSTER.filter(p => p.activity === 'training').map(p => <PlayerAvatar key={p.id} player={p} />)}
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
 
-      {/* 3. BOTTOM MENU */}
-      <View style={styles.bottomMenu}>
-        <View style={styles.menuIcons}>
-          {['Team', 'Train', 'Tactics', 'Shop'].map((item, i) => (
-            <TouchableOpacity key={i} style={styles.menuItem} onPress={() => item === 'Team' && navigation.navigate('Team')}>
-              <Text style={styles.menuIcon}>{['👥','🏋️','📋','👜'][i]}</Text>
-              <Text style={styles.menuLabel}>{item}</Text>
+            <TouchableOpacity 
+                style={styles.exitButton}
+                activeOpacity={0.7}
+                onPress={() => navigation.goBack()}
+            >
+                <Text style={styles.exitText}>LEAVE LOBBY</Text>
+                <MaterialCommunityIcons name="logout" size={16} color={theme.colors.primary.main} />
             </TouchableOpacity>
-          ))}
         </View>
 
+        {/* Stats Card */}
+        <View style={styles.statsCard}>
+          <LinearGradient
+            colors={[theme.colors.primary.main, theme.colors.primary.dark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statsGradient}
+          >
+            <View style={styles.statRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>WIN RATE</Text>
+                <Text style={styles.statValue}>{teamStats.winRate}%</Text>
+              </View>
+              <View style={styles.verticalDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>MATCHES</Text>
+                <Text style={styles.statValue}>{teamStats.matches}</Text>
+              </View>
+              <View style={styles.verticalDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>AVG GOLD</Text>
+                <Text style={styles.statValue}>{teamStats.avgGold}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Menu Grid */}
+        <Text style={styles.sectionTitle}>MANAGEMENT</Text>
+        <View style={styles.gridContainer}>
+          <MenuCard 
+            title="Active Roster" 
+            subtitle="Lineup & Synergy"
+            icon="account-group"
+            color="#60a5fa"
+            onPress={() => navigation.navigate('MobaRoster')}
+          />
+          <MenuCard 
+            title="Hero Database" 
+            subtitle="Meta Analysis"
+            icon="book-open-variant"
+            color="#fbbf24"
+            onPress={() => navigation.navigate('Heroes')} // Tab Heroes
+          />
+          <MenuCard 
+            title="Match Schedule" 
+            subtitle="Upcoming Games"
+            icon="calendar-clock"
+            color="#34d399"
+            onPress={() => navigation.navigate('Matches')} // Tab Matches
+          />
+          <MenuCard 
+            title="Draft Simulator" 
+            subtitle="Practice Picks"
+            icon="chess-queen"
+            color="#f472b6"
+            onPress={() => navigation.navigate('MobaDraft')}
+          />
+        </View>
+
+        {/* Next Match Teaser */}
+        <Text style={styles.sectionTitle}>NEXT MATCH</Text>
         <TouchableOpacity 
-          style={[styles.actionBtn, isWeekend ? { backgroundColor: '#ef4444' } : { backgroundColor: '#334155' }]}
-          onPress={handleNextDay}
+            style={styles.matchCard}
+            onPress={() => navigation.navigate('MobaMatch')}
         >
-          <Text style={styles.actionBtnText}>{isWeekend ? '⚔️ START MATCH' : '🌙 END DAY'}</Text>
+            <ImageBackground 
+                source={{ uri: 'https://images.contentstack.io/v3/assets/blt731acb42bb3d1659/blt12563456345/league-map.jpg' }} // Mock bg
+                style={styles.matchBg}
+                imageStyle={{ borderRadius: 12, opacity: 0.5 }}
+            >
+                <LinearGradient
+                    colors={['transparent', 'rgba(15, 23, 42, 0.9)']}
+                    style={styles.matchContent}
+                >
+                    <View style={styles.matchInfo}>
+                        <Text style={styles.matchLabel}>REGULAR SEASON</Text>
+                        <Text style={styles.opponentName}>VS RRQ HOSHI</Text>
+                        <View style={styles.timeTag}>
+                            <Ionicons name="time-outline" size={14} color="#fff" />
+                            <Text style={styles.timeText}>TOMORROW @ 19:00</Text>
+                        </View>
+                    </View>
+                    <View style={styles.playButton}>
+                        <Ionicons name="play" size={24} color="#fff" />
+                    </View>
+                </LinearGradient>
+            </ImageBackground>
         </TouchableOpacity>
-      </View>
+
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  // HUD
-  topHud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 50, paddingHorizontal: 15, paddingBottom: 15, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155', zIndex: 10 },
-  backBtn: { backgroundColor: '#334155', padding: 8, borderRadius: 5 },
-  backText: { color: '#94a3b8', fontSize: 11, fontWeight: 'bold' },
-  dateBox: { flexDirection: 'row', alignItems: 'center' },
-  weekBadge: { backgroundColor: '#f59e0b', paddingHorizontal: 6, borderRadius: 4, marginRight: 5 },
-  weekText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  dayText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  resBox: { flexDirection: 'row', gap: 10 },
-  resText: { color: '#fbbf24', fontSize: 12, fontWeight: 'bold' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' },
+  scrollContent: { padding: 20, paddingBottom: 40 },
   
-  // House
-  houseArea: { flex: 1, backgroundColor: '#1e293b' }, // Fallback color
-  houseBg: { flex: 1, justifyContent: 'flex-end', paddingBottom: 20 },
-  building: { marginHorizontal: 20, borderWidth: 2, borderColor: '#475569', backgroundColor: 'rgba(15, 23, 42, 0.9)', borderRadius: 8, overflow: 'hidden' },
-  floor: { height: 100, borderBottomWidth: 1, borderBottomColor: '#334155', padding: 5 },
-  roomName: { position: 'absolute', top: 2, left: 5, color: '#64748b', fontSize: 8, fontWeight: 'bold' },
-  roomContent: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: '100%', paddingBottom: 5 },
-  
-  // Avatar
-  avatarContainer: { alignItems: 'center' },
-  avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#fff', backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  roleBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#0f172a', width: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#fff' },
-  roleText: { color: '#fff', fontSize: 8, fontWeight: 'bold' },
-  energyBarBg: { width: 30, height: 3, backgroundColor: '#333', marginBottom: 2, borderRadius: 1 },
-  energyBarFill: { height: '100%', backgroundColor: '#10b981', borderRadius: 1 },
-  
-  // Menu
-  bottomMenu: { backgroundColor: '#1e293b', padding: 15, borderTopLeftRadius: 15, borderTopRightRadius: 15 },
-  menuIcons: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  menuItem: { alignItems: 'center', flex: 1 },
-  menuIcon: { fontSize: 20, marginBottom: 2 },
-  menuLabel: { color: '#94a3b8', fontSize: 10 },
-  actionBtn: { padding: 12, borderRadius: 8, alignItems: 'center' },
-  actionBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  greeting: { color: '#94a3b8', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
+  username: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  exitButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
+  exitText: { color: theme.colors.primary.main, fontSize: 10, fontWeight: 'bold', marginRight: 6, letterSpacing: 1 },
+
+  statsCard: { borderRadius: 16, marginBottom: 30, overflow: 'hidden', elevation: 8 },
+  statsGradient: { padding: 20 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statItem: { alignItems: 'center', flex: 1 },
+  statLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  statValue: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  verticalDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.3)' },
+
+  sectionTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 16 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 },
+  menuCard: { width: (width - 50) / 2, borderRadius: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#334155' },
+  menuGradient: { padding: 16, height: 110, justifyContent: 'space-between' },
+  iconContainer: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  menuTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  menuSubtitle: { color: '#64748b', fontSize: 10 },
+  arrowIcon: { position: 'absolute', top: 12, right: 12 },
+
+  matchCard: { height: 140, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#334155' },
+  matchBg: { width: '100%', height: '100%' },
+  matchContent: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', padding: 20 },
+  matchLabel: { color: theme.colors.primary.main, fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  opponentName: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
+  timeTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  timeText: { color: '#e2e8f0', fontSize: 12, marginLeft: 6 },
+  playButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: theme.colors.primary.main, justifyContent: 'center', alignItems: 'center', elevation: 5 },
 });

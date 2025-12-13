@@ -1,172 +1,127 @@
-/**
- * Map Pool Screen
- * Valorant map pool management
- */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
+  View, Text, StyleSheet, FlatList, ImageBackground, TouchableOpacity,
+  ActivityIndicator, Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
-// Theme
-import { theme } from '../../theme/theme';
+const { width } = Dimensions.get('window');
+
+// Filter map aneh (The Range, Basic Training)
+const IGNORED_MAPS = ['The Range', 'Basic Training', 'Training Grounds'];
 
 export default function MapPoolScreen({ navigation }) {
-  // Mock maps data
-  const maps = [
-    { id: 1, name: 'Bind', difficulty: 'Easy', icon: '🏰', status: 'available' },
-    { id: 2, name: 'Haven', difficulty: 'Medium', icon: '🏛️', status: 'available' },
-    { id: 3, name: 'Split', difficulty: 'Hard', icon: '⚡', status: 'available' },
-    { id: 4, name: 'Ascent', difficulty: 'Medium', icon: '🏛️', status: 'available' },
-    { id: 5, name: 'Icebox', difficulty: 'Hard', icon: '🧊', status: 'banned' },
-    { id: 6, name: 'Breeze', difficulty: 'Hard', icon: '🌪️', status: 'available' },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [maps, setMaps] = useState([]);
 
-  const getDifficultyColor = (difficulty) => {
-    switch (difficulty) {
-      case 'Easy': return theme.colors.status.success;
-      case 'Medium': return theme.colors.status.warning;
-      case 'Hard': return theme.colors.status.error;
-      default: return theme.colors.text.secondary;
+  useEffect(() => {
+    fetchMaps();
+  }, []);
+
+  const fetchMaps = async () => {
+    try {
+      const response = await fetch('https://valorant-api.com/v1/maps');
+      const json = await response.json();
+      if (json.status === 200) {
+        // Filter map yang playable saja
+        const validMaps = json.data.filter(m => !IGNORED_MAPS.includes(m.displayName));
+        setMaps(validMaps);
+      }
+    } catch (error) {
+      console.error("Failed to load maps:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const renderMap = ({ item }) => (
-    <TouchableOpacity style={[
-      styles.mapCard,
-      item.status === 'banned' && styles.bannedMap
-    ]}>
-      <View style={styles.mapHeader}>
-        <Text style={styles.mapIcon}>{item.icon}</Text>
-        <View style={styles.mapInfo}>
-          <Text style={styles.mapName}>{item.name}</Text>
-          <View style={styles.mapMeta}>
-            <View style={[
-              styles.difficultyBadge,
-              { backgroundColor: getDifficultyColor(item.difficulty) }
-            ]}>
-              <Text style={styles.difficultyText}>{item.difficulty}</Text>
+  const renderMapCard = ({ item }) => (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      style={styles.card}
+      onPress={() => navigation.navigate('MapTactic', { map: item })}
+    >
+      <ImageBackground
+        source={{ uri: item.splash }} // Gambar Artistik
+        style={styles.cardBg}
+        imageStyle={{ borderRadius: 8 }}
+      >
+        <LinearGradient
+            colors={['transparent', 'rgba(15, 23, 42, 0.95)']}
+            style={styles.gradient}
+        >
+            <Text style={styles.mapName}>{item.displayName.toUpperCase()}</Text>
+            <Text style={styles.coords}>{item.coordinates || 'Unknown Sector'}</Text>
+            
+            <View style={styles.actionRow}>
+                <Text style={styles.actionText}>OPEN STRAT BOARD</Text>
+                <Ionicons name="arrow-forward" size={14} color="#ff4655" />
             </View>
-            <Text style={styles.statusText}>
-              {item.status === 'banned' ? '🔒 Banned' : '✅ Available'}
-            </Text>
-          </View>
-        </View>
-      </View>
+        </LinearGradient>
+      </ImageBackground>
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[theme.colors.accent.purple, theme.colors.primary.dark]}
-        style={styles.header}
-      >
-        <Text style={styles.title}>Map Pool</Text>
-        <Text style={styles.subtitle}>Select your maps</Text>
-      </LinearGradient>
-
-      <View style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current Map Pool (6 maps)</Text>
-          <FlatList
-            data={maps}
-            renderItem={renderMap}
-            keyExtractor={item => item.id.toString()}
-            style={styles.mapsList}
-            showsVerticalScrollIndicator={false}
-          />
-        </View>
-      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color="#ff4655" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={maps}
+          renderItem={renderMapCard}
+          keyExtractor={item => item.uuid}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background.primary,
+  container: { flex: 1, backgroundColor: '#0f172a' },
+  listContent: { padding: 16 },
+  card: {
+    height: 180,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#1e293b',
+    // Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: theme.colors.text.inverse,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.text.secondary,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text.primary,
-    marginBottom: 15,
-  },
-  mapsList: {
-    maxHeight: 450,
-  },
-  mapCard: {
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    elevation: 2,
-  },
-  bannedMap: {
-    opacity: 0.6,
-  },
-  mapHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mapIcon: {
-    fontSize: 32,
-    marginRight: 15,
-  },
-  mapInfo: {
-    flex: 1,
+  cardBg: { width: '100%', height: '100%', justifyContent: 'flex-end' },
+  gradient: {
+    padding: 16,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
   },
   mapName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.text.primary,
-    marginBottom: 5,
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: 2,
   },
-  mapMeta: {
+  coords: {
+    color: '#94a3b8',
+    fontSize: 10,
+    marginBottom: 10,
+    fontFamily: 'System', // Monospace kalau ada lebih bagus
+  },
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  difficultyBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginRight: 10,
-  },
-  difficultyText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  statusText: {
+  actionText: {
+    color: '#ff4655',
     fontSize: 12,
-    color: theme.colors.text.secondary,
+    fontWeight: 'bold',
+    marginRight: 6,
   },
 });

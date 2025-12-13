@@ -2,6 +2,7 @@
  * Player Profile Screen
  * Design based on reference: image_602f12.jpg
  * Connects to MOBA API for Hero Images
+ * ADAPTED: Safe check for props coming from MobaRoster/TacticalTeam
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -18,6 +19,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
+import { Ionicons } from '@expo/vector-icons'; // Tambahan untuk icon
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,39 +28,30 @@ export default function PlayerProfileScreen({ route, navigation }) {
   const [heroData, setHeroData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // MOCK API FETCH (Karena direct API call ke ridwaanhall butuh proxy/backend)
-  // Di sini kita simulasikan data yang sudah "fetched" dari backend
   useEffect(() => {
-    // Simulasi loading
+    // Simulasi loading & Data Processing
     setTimeout(() => {
+      // [ADAPTASI] Deteksi sumber gambar (Moba vs Tactical vs Mock)
+      let displayImage = 'https://via.placeholder.com/400x600'; // Default
+      
+      if (player.signature_hero_image) displayImage = player.signature_hero_image; // Dari DB MOBA
+      else if (player.agentImage) displayImage = player.agentImage; // Dari DB Tactical
+      else if (player.image) displayImage = player.image; // Fallback legacy
+
       setHeroData({
-        // Kita gunakan gambar High Res dari aset Mobile Legends
-        fullImage: player.image.replace('square', '').replace('100', 'full'), // Mock logic
-        // Kalau player.image url asli, kita pakai itu. Kalau ui-avatar, kita cari gambar hero MLBB.
-        realImage: `https://img.mobilelegends.com/group1/M00/00/00/${getHeroImageId(player.name)}`, 
-        lore: "A specialized hero focusing on high damage output...",
+        fullImage: displayImage,
+        realImage: displayImage, 
+        lore: player.full_name ? `${player.full_name} is a professional player currently assigned to the ${player.current_role || 'Flex'} position.` : "A specialized hero focusing on high damage output...",
         equipment: [
-          { id: 1, name: 'Swift Boots', img: 'https://img.mobilelegends.com/group1/M00/00/00/rB_yZmALhPuAGhYMAAA1s48x7sU482.jpg', level: 1 },
-          { id: 2, name: 'Berserker', img: 'https://img.mobilelegends.com/group1/M00/00/00/rB_yZmALhPuAGhYMAAA1s48x7sU482.jpg', level: 2 },
-          { id: 3, name: 'Endless', img: 'https://img.mobilelegends.com/group1/M00/00/00/rB_yZmALhPuAGhYMAAA1s48x7sU482.jpg', level: 3 },
-          { id: 4, name: 'Blade', img: 'https://img.mobilelegends.com/group1/M00/00/00/rB_yZmALhPuAGhYMAAA1s48x7sU482.jpg', level: 4 },
+          { id: 1, name: 'Swift Boots', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Swift_Boots.png', level: 1 },
+          { id: 2, name: 'Berserker', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Berserker%27s_Fury.png', level: 2 },
+          { id: 3, name: 'Endless', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Endless_Battle.png', level: 3 },
+          { id: 4, name: 'Blade', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Blade_of_Despair.png', level: 4 },
         ]
       });
       setLoading(false);
-    }, 1000);
+    }, 800);
   }, []);
-
-  // Helper untuk mapping nama hero ke dummy image ID (Biar keliatan real)
-  const getHeroImageId = (name) => {
-    // Ini ID contoh dari server image MLBB
-    const map = {
-      'Layla': 'rB_yZmALhMeAat8ZAAQhR-ae67g479.jpg', // Layla
-      'Tigreal': 'rB_yZmALhOqAci2XAAQ9u8f35o8639.jpg', // Tigreal
-      'Eudora': 'rB_yZmALhOCAV8yFAAPp1S_10WU236.jpg', // Eudora
-      'Zilong': 'rB_yZmALhP6AX9l_AAM8s48x7sU222.jpg', // Zilong
-    };
-    return map[name] || 'rB_yZmALhMeAat8ZAAQhR-ae67g479.jpg'; // Default Layla
-  };
 
   const StatBar = ({ label, value1, value2 }) => (
     <View style={styles.statRow}>
@@ -70,6 +63,12 @@ export default function PlayerProfileScreen({ route, navigation }) {
     </View>
   );
 
+  // [ADAPTASI] Mapping statistik dari DB ke UI
+  // Jika data stats spesifik tidak ada, gunakan OVR sebagai base
+  const attackVal = player.tactical_aim || player.moba_laning_skill || player.ovr || 80;
+  const skillVal = player.tactical_gamesense || player.moba_teamfight_presence || (player.ovr - 5) || 75;
+  const speedVal = player.ovr ? Math.round(player.ovr * 0.9) : 85;
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar hidden />
@@ -77,11 +76,12 @@ export default function PlayerProfileScreen({ route, navigation }) {
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>◀ BACK</Text>
+          <Ionicons name="chevron-back" size={16} color="#fff" />
+          <Text style={styles.backText}> BACK</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>ESPORTS MANAGER</Text>
-          <Text style={styles.headerSubtitle}>MOBA DIVISION - PLAYER PROFILE</Text>
+          <Text style={styles.headerSubtitle}>PLAYER DOSSIER</Text>
         </View>
         <View style={{ width: 60 }} />
       </View>
@@ -93,8 +93,9 @@ export default function PlayerProfileScreen({ route, navigation }) {
             {loading ? (
               <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 100 }} />
             ) : (
-              <Image 
-                source={{ uri: heroData.realImage }} 
+              <Animatable.Image 
+                animation="fadeInLeft"
+                source={{ uri: heroData?.realImage }} 
                 style={styles.heroFullImage}
                 resizeMode="cover"
               />
@@ -107,46 +108,51 @@ export default function PlayerProfileScreen({ route, navigation }) {
         <View style={styles.rightCol}>
           
           {/* NAME & ROLE */}
-          <View style={styles.infoBox}>
-            <Text style={styles.heroName}>{player.name.toUpperCase()}</Text>
+          <Animatable.View animation="fadeInRight" delay={200} style={styles.infoBox}>
+            <Text style={styles.heroName}>{player.name?.toUpperCase()}</Text>
             <View style={styles.roleBox}>
               <Text style={styles.roleLabel}>ROLE: </Text>
-              <Text style={styles.roleValue}>{player.role.toUpperCase()}</Text>
+              <Text style={styles.roleValue}>{player.current_role?.toUpperCase() || 'UNKNOWN'}</Text>
             </View>
-          </View>
+          </Animatable.View>
 
           {/* STATS COMPARISON (Current vs Max/Next) */}
-          <View style={styles.statsContainer}>
+          <Animatable.View animation="fadeInRight" delay={300} style={styles.statsContainer}>
             <View style={styles.statHeader}>
               <Text style={styles.statColHeader}></Text>
               <Text style={styles.statColHeader}>CUR</Text>
               <Text style={styles.statColHeader}>MAX</Text>
             </View>
-            <StatBar label="ATTACK" value1={player.stats.attack || 90} value2={95} />
-            <StatBar label="SKILL" value1={player.stats.skill || 88} value2={92} />
-            <StatBar label="SPEED" value1={player.stats.speed || 85} value2={89} />
-            <StatBar label="FARM" value1={75} value2={80} />
-            <StatBar label="VISION" value1={86} value2={90} />
-          </View>
+            <StatBar label="OFFENSE" value1={attackVal} value2={99} />
+            <StatBar label="GAME IQ" value1={skillVal} value2={99} />
+            <StatBar label="MECHANIC" value1={speedVal} value2={99} />
+            <StatBar label="MENTAL" value1={player.mental || 70} value2={100} />
+            <StatBar label="FATIGUE" value1={player.fatigue || 0} value2={100} />
+          </Animatable.View>
 
-          {/* EQUIPMENT CARDS */}
-          <View style={styles.cardsContainer}>
+          {/* EQUIPMENT CARDS (Visual Only for now) */}
+          <Animatable.View animation="fadeInRight" delay={400} style={styles.cardsContainer}>
             {[1, 2, 3, 4].map((slot) => (
               <View key={slot} style={styles.cardSlot}>
                 <View style={styles.cardLevelBadge}><Text style={styles.lvlText}>{slot}</Text></View>
-                <Image 
-                  source={{ uri: `https://via.placeholder.com/100x100/333/fff?text=Item${slot}` }} 
-                  style={styles.cardImage} 
-                />
+                {/* Placeholder item image jika heroData belum load */}
+                {heroData && (
+                    <Image 
+                      source={{ uri: heroData.equipment[slot-1]?.img }} 
+                      style={styles.cardImage} 
+                    />
+                )}
                 <View style={styles.cardArrow}><Text style={{color:'#000', fontSize:8}}>▲</Text></View>
               </View>
             ))}
-          </View>
+          </Animatable.View>
 
           {/* UPGRADE BUTTON */}
-          <TouchableOpacity style={styles.upgradeBtn}>
-            <Text style={styles.upgradeText}>UPGRADE</Text>
-          </TouchableOpacity>
+          <Animatable.View animation="bounceIn" delay={600}>
+            <TouchableOpacity style={styles.upgradeBtn}>
+                <Text style={styles.upgradeText}>TRAINING DRILL</Text>
+            </TouchableOpacity>
+          </Animatable.View>
 
         </View>
       </View>
@@ -163,12 +169,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   
   // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, backgroundColor: '#1e293b', borderBottomWidth: 2, borderColor: '#334155' },
-  backBtn: { padding: 8, backgroundColor: '#334155', borderRadius: 5, borderWidth:1, borderColor:'#475569' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, paddingTop: 40, backgroundColor: '#1e293b', borderBottomWidth: 2, borderColor: '#334155' },
+  backBtn: { flexDirection: 'row', alignItems:'center', padding: 8, backgroundColor: '#334155', borderRadius: 5, borderWidth:1, borderColor:'#475569' },
   backText: { color: '#fff', fontWeight: 'bold', fontSize: 10 },
   headerInfo: { alignItems: 'center' },
-  headerTitle: { color: '#fff', fontWeight: '900', fontSize: 12 },
-  headerSubtitle: { color: '#fff', fontSize: 9 },
+  headerTitle: { color: '#fff', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
+  headerSubtitle: { color: '#94a3b8', fontSize: 9, letterSpacing: 2 },
 
   content: { flex: 1, flexDirection: 'row' },
 
@@ -182,17 +188,17 @@ const styles = StyleSheet.create({
   rightCol: { flex: 1, padding: 15, justifyContent: 'space-between' },
   
   infoBox: { marginBottom: 10, borderBottomWidth: 1, borderColor: '#334155', paddingBottom: 10 },
-  heroName: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: 1 },
+  heroName: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: 1, fontStyle: 'italic' },
   roleBox: { flexDirection: 'row', marginTop: 5 },
   roleLabel: { color: '#94a3b8', fontSize: 10, fontWeight: 'bold' },
-  roleValue: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  roleValue: { color: '#3b82f6', fontSize: 10, fontWeight: 'bold' },
 
   // Stats
   statsContainer: { marginBottom: 10 },
   statHeader: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 5 },
   statColHeader: { color: '#94a3b8', fontSize: 8, width: 30, textAlign: 'center', fontWeight: 'bold' },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, backgroundColor: '#1e293b', padding: 4, borderRadius: 4 },
-  statLabel: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, backgroundColor: '#1e293b', padding: 4, borderRadius: 4, borderWidth: 1, borderColor: '#334155' },
+  statLabel: { color: '#fff', fontSize: 10, fontWeight: 'bold', paddingLeft: 4 },
   statValues: { flexDirection: 'row' },
   val1: { color: '#fff', fontSize: 12, fontWeight: 'bold', width: 30, textAlign: 'center' },
   val2: { color: '#4ade80', fontSize: 12, fontWeight: 'bold', width: 30, textAlign: 'center' },
