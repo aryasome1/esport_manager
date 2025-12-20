@@ -1,8 +1,7 @@
 /**
- * Player Profile Screen
+ * Player Profile Screen (Dossier Style)
  * Design based on reference: image_602f12.jpg
- * Connects to MOBA API for Hero Images
- * ADAPTED: Safe check for props coming from MobaRoster/TacticalTeam
+ * Features: Dynamic Avatar, Real Stats, Equipment Slots
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -14,43 +13,40 @@ import {
   Dimensions,
   SafeAreaView,
   StatusBar,
-  ScrollView,
   ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
-import { Ionicons } from '@expo/vector-icons'; // Tambahan untuk icon
+import { Ionicons } from '@expo/vector-icons';
 
-const { width, height } = Dimensions.get('window');
+// [IMPORT BARU] Import utility avatar
+import { getPlayerAvatar } from '../../utils/PlayerAvatars';
+
+const { width } = Dimensions.get('window');
 
 export default function PlayerProfileScreen({ route, navigation }) {
   const { player } = route.params;
-  const [heroData, setHeroData] = useState(null);
+  
+  // [LOGIC] Ambil Role & Avatar
+  const playerRole = player.current_role || player.role || player.position || 'Unknown';
+  const avatarSource = getPlayerAvatar(playerRole);
+
   const [loading, setLoading] = useState(true);
+  const [heroData, setHeroData] = useState(null);
 
   useEffect(() => {
-    // Simulasi loading & Data Processing
+    // Simulasi loading data equipment (nanti bisa dari DB juga)
     setTimeout(() => {
-      // [ADAPTASI] Deteksi sumber gambar (Moba vs Tactical vs Mock)
-      let displayImage = 'https://via.placeholder.com/400x600'; // Default
-      
-      if (player.signature_hero_image) displayImage = player.signature_hero_image; // Dari DB MOBA
-      else if (player.agentImage) displayImage = player.agentImage; // Dari DB Tactical
-      else if (player.image) displayImage = player.image; // Fallback legacy
-
       setHeroData({
-        fullImage: displayImage,
-        realImage: displayImage, 
-        lore: player.full_name ? `${player.full_name} is a professional player currently assigned to the ${player.current_role || 'Flex'} position.` : "A specialized hero focusing on high damage output...",
         equipment: [
-          { id: 1, name: 'Swift Boots', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Swift_Boots.png', level: 1 },
-          { id: 2, name: 'Berserker', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Berserker%27s_Fury.png', level: 2 },
-          { id: 3, name: 'Endless', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Endless_Battle.png', level: 3 },
-          { id: 4, name: 'Blade', img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Blade_of_Despair.png', level: 4 },
+          { id: 1, img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Swift_Boots.png' },
+          { id: 2, img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Berserker%27s_Fury.png' },
+          { id: 3, img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Endless_Battle.png' },
+          { id: 4, img: 'https://mobilelegends.fandom.com/wiki/Special:FilePath/Blade_of_Despair.png' },
         ]
       });
       setLoading(false);
-    }, 800);
+    }, 500);
   }, []);
 
   const StatBar = ({ label, value1, value2 }) => (
@@ -63,11 +59,11 @@ export default function PlayerProfileScreen({ route, navigation }) {
     </View>
   );
 
-  // [ADAPTASI] Mapping statistik dari DB ke UI
-  // Jika data stats spesifik tidak ada, gunakan OVR sebagai base
-  const attackVal = player.tactical_aim || player.moba_laning_skill || player.ovr || 80;
-  const skillVal = player.tactical_gamesense || player.moba_teamfight_presence || (player.ovr - 5) || 75;
-  const speedVal = player.ovr ? Math.round(player.ovr * 0.9) : 85;
+  // Mapping statistik dari DB
+  const attackVal = player.mechanics || player.tactical_aim || 75;
+  const skillVal = player.macro || player.tactical_gamesense || 70;
+  const speedVal = player.kda_avg ? Math.min(Math.round(player.kda_avg * 10), 99) : 60; // KDA -> 0-99 scale roughly
+  const mentalVal = player.morale || 80;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -87,7 +83,8 @@ export default function PlayerProfileScreen({ route, navigation }) {
       </View>
 
       <View style={styles.content}>
-        {/* LEFT COLUMN: HERO IMAGE */}
+        
+        {/* LEFT COLUMN: HERO IMAGE / AVATAR */}
         <View style={styles.leftCol}>
           <View style={styles.heroFrame}>
             {loading ? (
@@ -95,7 +92,7 @@ export default function PlayerProfileScreen({ route, navigation }) {
             ) : (
               <Animatable.Image 
                 animation="fadeInLeft"
-                source={{ uri: heroData?.realImage }} 
+                source={avatarSource}  // [UPDATED] Pakai avatarSource
                 style={styles.heroFullImage}
                 resizeMode="cover"
               />
@@ -109,14 +106,17 @@ export default function PlayerProfileScreen({ route, navigation }) {
           
           {/* NAME & ROLE */}
           <Animatable.View animation="fadeInRight" delay={200} style={styles.infoBox}>
-            <Text style={styles.heroName}>{player.name?.toUpperCase()}</Text>
+            <Text style={styles.heroName} numberOfLines={1}>
+                {player.ign || player.username || 'PLAYER'}
+            </Text>
             <View style={styles.roleBox}>
               <Text style={styles.roleLabel}>ROLE: </Text>
-              <Text style={styles.roleValue}>{player.current_role?.toUpperCase() || 'UNKNOWN'}</Text>
+              <Text style={styles.roleValue}>{playerRole.toUpperCase()}</Text>
             </View>
+            <Text style={styles.teamText}>Phantom Gaming</Text>
           </Animatable.View>
 
-          {/* STATS COMPARISON (Current vs Max/Next) */}
+          {/* STATS COMPARISON */}
           <Animatable.View animation="fadeInRight" delay={300} style={styles.statsContainer}>
             <View style={styles.statHeader}>
               <Text style={styles.statColHeader}></Text>
@@ -126,16 +126,15 @@ export default function PlayerProfileScreen({ route, navigation }) {
             <StatBar label="OFFENSE" value1={attackVal} value2={99} />
             <StatBar label="GAME IQ" value1={skillVal} value2={99} />
             <StatBar label="MECHANIC" value1={speedVal} value2={99} />
-            <StatBar label="MENTAL" value1={player.mental || 70} value2={100} />
-            <StatBar label="FATIGUE" value1={player.fatigue || 0} value2={100} />
+            <StatBar label="MENTAL" value1={mentalVal} value2={100} />
+            <StatBar label="ENERGY" value1={player.energy || 100} value2={100} />
           </Animatable.View>
 
-          {/* EQUIPMENT CARDS (Visual Only for now) */}
+          {/* EQUIPMENT CARDS */}
           <Animatable.View animation="fadeInRight" delay={400} style={styles.cardsContainer}>
             {[1, 2, 3, 4].map((slot) => (
               <View key={slot} style={styles.cardSlot}>
                 <View style={styles.cardLevelBadge}><Text style={styles.lvlText}>{slot}</Text></View>
-                {/* Placeholder item image jika heroData belum load */}
                 {heroData && (
                     <Image 
                       source={{ uri: heroData.equipment[slot-1]?.img }} 
@@ -181,17 +180,24 @@ const styles = StyleSheet.create({
   // Left Column
   leftCol: { width: '45%', backgroundColor: '#1e293b', borderRightWidth: 2, borderColor: '#334155' },
   heroFrame: { flex: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  heroFullImage: { width: '150%', height: '100%', marginLeft: -30 }, // Zoom effect
+  // [FIX] Style untuk Avatar agar pas di kolom kiri
+  heroFullImage: { 
+      width: '100%', 
+      height: '80%', // Sesuaikan tinggi
+      marginLeft: 0, 
+      marginTop: 20
+  }, 
   fadeOverlay: { position: 'absolute', bottom: 0, width: '100%', height: 100 },
 
   // Right Column
   rightCol: { flex: 1, padding: 15, justifyContent: 'space-between' },
   
   infoBox: { marginBottom: 10, borderBottomWidth: 1, borderColor: '#334155', paddingBottom: 10 },
-  heroName: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: 1, fontStyle: 'italic' },
+  heroName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 1, fontStyle: 'italic' },
   roleBox: { flexDirection: 'row', marginTop: 5 },
   roleLabel: { color: '#94a3b8', fontSize: 10, fontWeight: 'bold' },
   roleValue: { color: '#3b82f6', fontSize: 10, fontWeight: 'bold' },
+  teamText: { color: '#64748b', fontSize: 10, marginTop: 4, fontStyle: 'italic' },
 
   // Stats
   statsContainer: { marginBottom: 10 },

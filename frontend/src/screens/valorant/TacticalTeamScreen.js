@@ -1,28 +1,28 @@
 /**
  * TacticalTeamScreen
- * Updated UI: Detailed Landscape Card (Reference Style)
- * Theme: Valorant Red/Black
+ * Layout: Matches MobaRosterScreen (Landscape Card)
+ * Theme: Valorant Style (Red #ff4655, Sharp Edges, Dark Slate)
  */
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  ActivityIndicator, Dimensions
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Animatable from 'react-native-animatable';
 
 import { theme } from '../../theme/theme';
 import { apiClient } from '../../services/ApiClient';
 import { useAuth } from '../../contexts/AuthContext';
-
-const AGENT_IMAGES = {
-    'duelist': 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt213441880cf2cdf9/5f8d6d6f9243ae0f35334c9c/VALORANT_Jett_Red_Crop.jpg',
-    'initiator': 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt72491e480629734e/5f8d6d69578430292796e626/VALORANT_Sova_Red_Crop.jpg',
-    'controller': 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt12c5b7d602330e70/5f8d6d764726b20f1882ff02/VALORANT_Omen_Red_Crop.jpg',
-    'sentinel': 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt6d5598683515865a/5f8d6d62578430292796e622/VALORANT_Cypher_Red_Crop.jpg',
-    'default': 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/bltceaa6cf20d328bd5/5eb7ed0547887958ec95c92d/valorant-wallpaper-22.jpg'
-};
+import { getPlayerAvatar } from '../../utils/PlayerAvatars';
 
 export default function TacticalTeamScreen({ navigation }) {
   const { user } = useAuth();
@@ -30,16 +30,16 @@ export default function TacticalTeamScreen({ navigation }) {
   const [roster, setRoster] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // --- LOAD DATA ---
   const loadTeamData = async () => {
     try {
-      const teamId = user?.team_id || 1;
+      const teamId = user?.team_id || 5;
       const response = await apiClient.get(`/api/players/?team_id=${teamId}&division=tactical`);
+      
       if (response.data && response.data.items) {
-        const formatted = response.data.items.map(p => ({
-            ...p,
-            agentImage: AGENT_IMAGES[p.current_role?.toLowerCase()] || AGENT_IMAGES.default,
-        }));
-        setRoster(formatted);
+        setRoster(response.data.items);
+      } else {
+        setRoster([]);
       }
     } catch (error) {
       console.error("Failed to load tactical roster:", error);
@@ -52,173 +52,391 @@ export default function TacticalTeamScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadTeamData();
-    }, [])
+    }, [user])
   );
 
-  const renderPlayerCard = ({ item, index }) => (
-    <Animatable.View 
-        animation="fadeInRight" 
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadTeamData();
+  };
+
+  const renderPlayerCard = ({ item, index }) => {
+    // Logic Role & Avatar
+    const rawRole = item.role || item.position || item.current_role || 'Unknown';
+    const avatarSource = getPlayerAvatar(rawRole);
+
+    return (
+      <Animatable.View 
+        animation="fadeInRight" // Animasi dari kanan biar beda dikit sama MOBA
         delay={index * 100} 
-        style={styles.cardContainer}
-    >
-      <View style={styles.card}>
-        
-        {/* BACKGROUND MAP PATTERN */}
-        <Image 
-            source={{ uri: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt12563456345/valorant-map-ascent.jpg' }} 
-            style={styles.cardBg}
-            resizeMode="cover"
-        />
-        <LinearGradient
-            colors={['rgba(15, 23, 42, 0.95)', 'rgba(15, 23, 42, 0.8)']}
-            style={styles.bgOverlay}
-        />
-
-        {/* CONTENT ROW */}
-        <View style={styles.contentRow}>
-            
-            {/* LEFT: AGENT IMAGE */}
-            <TouchableOpacity 
-                style={styles.portraitContainer}
-                onPress={() => navigation.navigate('PlayerProfile', { player: item })}
+        style={styles.cardWrapper}
+      >
+        <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('PlayerProfile', { player: item })}
+        >
+            <LinearGradient
+                // Warna Gradient: Slate Gelap ke Sedikit Merah Gelap
+                colors={['rgba(30, 41, 59, 0.95)', 'rgba(15, 23, 42, 0.95)']}
+                style={styles.cardGradient}
             >
-                <Image 
-                    source={{ uri: item.agentImage }} 
-                    style={styles.heroImage} 
-                    resizeMode="cover"
-                />
-                <View style={styles.nameBadge}>
-                    <Text style={styles.playerName} numberOfLines={1}>{item.name.toUpperCase()}</Text>
-                </View>
-            </TouchableOpacity>
+                {/* Aksen Garis Merah di Kiri */}
+                <View style={styles.accentBorder} />
 
-            {/* RIGHT: STATS MATRIX */}
-            <View style={styles.statsContainer}>
-                <View style={styles.headerInfo}>
-                    <Text style={styles.roleTitle}>{item.current_role || 'OPERATOR'}</Text>
-                    <View style={styles.ovrBadge}>
-                         <Text style={styles.ovrText}>{item.ovr}</Text>
+                <View style={styles.cardContent}>
+                    
+                    {/* [BAGIAN 1] AVATAR (Kiri) - Style Valorant (Hexagon/Sharp) */}
+                    <View style={styles.avatarSection}>
+                        <View style={styles.avatarContainer}>
+                            <Image 
+                                source={avatarSource} 
+                                style={styles.avatarImage} 
+                                resizeMode="cover"
+                            />
+                            <View style={styles.roleBadgeSmall}>
+                                 <Text style={styles.roleBadgeText}>
+                                    {rawRole !== 'Unknown' ? rawRole.charAt(0).toUpperCase() : '?'}
+                                 </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* [BAGIAN 2] INFO UTAMA (Kanan) */}
+                    <View style={styles.infoSection}>
+                        {/* Header: Role & OVR */}
+                        <View style={styles.cardHeader}>
+                            <Text style={styles.roleTitle}>{rawRole.toUpperCase()}</Text>
+                            <View style={styles.ovrBadge}>
+                                <Text style={styles.ovrText}>OVR {item.overall_rating || item.ovr || 50}</Text>
+                            </View>
+                        </View>
+
+                        {/* Nama Pemain - Font Italic ala FPS */}
+                        <Text style={styles.ignText} numberOfLines={1}>
+                            {item.ign || item.username || item.name || 'AGENT'}
+                        </Text>
+
+                        <View style={styles.separator} />
+
+                        {/* Stats Grid - Mapping Tactical Stats */}
+                        <View style={styles.statsGrid}>
+                            <View style={styles.statCol}>
+                                <Text style={styles.statLabel}>AIM</Text>
+                                <Text style={styles.statValue}>{item.tactical_aim || '-'}</Text>
+                            </View>
+                            <View style={styles.statCol}>
+                                 <Text style={styles.statLabel}>SENSE</Text>
+                                 <Text style={styles.statValue}>{item.tactical_gamesense || '-'}</Text>
+                            </View>
+                            <View style={styles.statCol}>
+                                <Text style={styles.statLabel}>UTIL</Text>
+                                <Text style={styles.statValue}>{item.tactical_utility || '-'}</Text>
+                            </View>
+                             <View style={styles.statCol}>
+                                <Text style={styles.statLabel}>CLUTCH</Text>
+                                <Text style={styles.statValue}>{item.tactical_clutch || '-'}</Text>
+                            </View>
+                        </View>
+                        
+                        <Text style={styles.teamName}>PROTOCOL ID: #{item.id}</Text>
                     </View>
                 </View>
+            </LinearGradient>
+        </TouchableOpacity>
+      </Animatable.View>
+    );
+  };
 
-                {/* Stats Grid - FPS Terms */}
-                <View style={styles.statsGrid}>
-                    <View style={styles.statCol}>
-                        <Text style={styles.statLabel}>AIM</Text>
-                        <Text style={styles.statValue}>{item.tactical_aim || 50}</Text>
-                    </View>
-                    <View style={styles.statCol}>
-                        <Text style={styles.statLabel}>SENSE</Text>
-                        <Text style={styles.statValue}>{item.tactical_gamesense || 50}</Text>
-                    </View>
-                    <View style={styles.statCol}>
-                        <Text style={styles.statLabel}>UTIL</Text>
-                        <Text style={styles.statValue}>{Math.round(item.ovr * 0.95)}</Text>
-                    </View>
-                    <View style={styles.statCol}>
-                        <Text style={styles.statLabel}>CLUTCH</Text>
-                        <Text style={styles.statValue}>{Math.round(item.ovr * 0.85)}</Text>
-                    </View>
-                </View>
-
-                <Text style={styles.teamName}>PROTOCOL ID: #{item.id}</Text>
-            </View>
-        </View>
-
-        {/* FOOTER BUTTONS */}
-        <View style={styles.footerRow}>
-            <View style={styles.divisionLabel}>
-                <Text style={styles.divisionText}>{item.name} UNIT</Text>
-            </View>
-            
-            <View style={styles.actionButtons}>
-                {/* Button colors matched */}
-                <TouchableOpacity style={styles.btnUpgrade}>
-                    <Text style={styles.btnText}>TRAIN</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.btnBench}>
-                    <Text style={styles.btnText}>RESERVE</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ff4655" />
       </View>
-    </Animatable.View>
-  );
-
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#ff4655" /></View>;
+    );
+  }
 
   return (
     <View style={styles.container}>
+      <LinearGradient
+        colors={['#0f172a', '#1e293b', '#0f172a']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      
+      {/* HEADER TACTICAL STYLE */}
+      <View style={styles.header}>
+         <View>
+            <Text style={styles.headerTitle}>TACTICAL ROSTER</Text>
+            <Text style={styles.headerSubtitle}>PROTOCOL: ALPHA • SEASON 1</Text>
+         </View>
+         <View style={styles.headerIcon}>
+            <MaterialCommunityIcons name="crosshairs-gps" size={24} color="#ff4655" />
+         </View>
+      </View>
+
       <FlatList
         data={roster}
+        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
         renderItem={renderPlayerCard}
-        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={() => { setRefreshing(true); loadTeamData(); }}
+        refreshControl={
+            <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#ff4655"
+            />
+        }
       />
+      
+      {/* FOOTER */}
+      <View style={styles.footerRow}>
+         <View style={styles.divisionLabel}>
+            <Text style={styles.divisionText}>DIV: TACTICAL</Text>
+         </View>
+         <View style={styles.statusLabel}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>ACTIVE</Text>
+         </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' },
-  listContent: { padding: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+  },
+  
+  // Header Style (Tactical: Red Accent)
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#ff4655', // Red Border
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '900', // Extra Bold
+    color: '#ffffff',
+    letterSpacing: 1,
+    fontStyle: 'italic',
+  },
+  headerSubtitle: {
+    fontSize: 10,
+    color: '#ff4655', // Red Text
+    marginTop: 2,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 4, // Sharp corners
+    backgroundColor: 'rgba(255, 70, 85, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ff4655',
+  },
 
-  // Card Structure
-  cardContainer: { marginBottom: 16 },
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 2, // Sharp corners for FPS
-    overflow: 'hidden',
+  // List
+  listContent: {
+    padding: 16,
+  },
+
+  // Card Styling (Layout Matches MOBA, Style Matches TACTICAL)
+  cardWrapper: {
+    marginBottom: 16,
+    borderRadius: 4, // Sharp corners
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  cardGradient: {
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#334155',
-    elevation: 5,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  cardBg: { position: 'absolute', width: '100%', height: '100%', opacity: 0.3 },
-  bgOverlay: { position: 'absolute', width: '100%', height: '100%' },
-
-  // Content Layout
-  contentRow: { flexDirection: 'row', height: 130 },
+  accentBorder: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 4,
+      backgroundColor: '#ff4655', // Red Sidebar
+  },
+  cardContent: {
+    flexDirection: 'row', // Horizontal Layout (Sama kaya MOBA)
+    padding: 16,
+    paddingLeft: 20, // Extra padding karena ada accentBorder
+  },
   
-  // Left: Portrait
-  portraitContainer: { width: '35%', position: 'relative', borderRightWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  heroImage: { width: '100%', height: '100%' },
-  nameBadge: {
-    position: 'absolute', bottom: 10, left: 0, right: 0,
-    backgroundColor: 'rgba(255, 70, 85, 0.9)', // Red background
-    paddingVertical: 4, alignItems: 'center',
-    borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#fff'
+  // -- Bagian Kiri: Avatar --
+  avatarSection: {
+    marginRight: 16,
+    justifyContent: 'center',
   },
-  playerName: { color: '#fff', fontWeight: '900', fontSize: 12, letterSpacing: 1, fontStyle: 'italic' },
-
-  // Right: Stats
-  statsContainer: { flex: 1, padding: 10, justifyContent: 'space-between' },
-  headerInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  roleTitle: { color: '#ff4655', fontWeight: 'bold', fontSize: 12, letterSpacing: 1 },
-  ovrBadge: { backgroundColor: '#ff4655', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 2 },
-  ovrText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  statCol: { width: '48%', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center' },
-  statLabel: { color: '#94a3b8', fontSize: 9, fontWeight: 'bold' },
-  statValue: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-
-  teamName: { color: '#64748b', fontSize: 9, fontStyle: 'italic', marginTop: 4, textAlign: 'right' },
-
-  // Footer Buttons
-  footerRow: { 
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.95)', padding: 8, borderTopWidth: 1, borderColor: '#334155' 
+  avatarContainer: {
+    position: 'relative',
   },
-  divisionLabel: { flex: 1 },
-  divisionText: { color: '#fff', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
+  avatarImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 35, // Bulat
+    borderWidth: 2,
+    borderColor: '#ff4655', // Red Border
+    backgroundColor: '#0f172a',
+  },
+  roleBadgeSmall: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#ff4655', // Red Background
+    width: 24,
+    height: 24,
+    borderRadius: 4, // Sharp Badge
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  roleBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
 
-  actionButtons: { flexDirection: 'row', gap: 8 },
-  btnUpgrade: { backgroundColor: '#22c55e', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 2 },
-  btnBench: { backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 2 },
-  btnText: { color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  // -- Bagian Kanan: Info --
+  infoSection: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  roleTitle: {
+    color: '#ff4655', // Red Text
+    fontWeight: 'bold',
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  ovrBadge: {
+    backgroundColor: 'rgba(255, 70, 85, 0.2)', // Red Transparent
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 2, // Sharp
+    borderWidth: 1,
+    borderColor: '#ff4655',
+  },
+  ovrText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  ignText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '900', // Heavy Bold
+    fontStyle: 'italic', // Italic
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: 'rgba(255, 70, 85, 0.3)', // Redish Separator
+    marginBottom: 8,
+  },
+
+  // Stats Grid
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCol: {
+    width: '48%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  statLabel: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  statValue: {
+    color: '#e2e8f0',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  teamName: {
+    color: '#64748b',
+    fontSize: 9,
+    fontStyle: 'italic',
+    marginTop: 6,
+    textAlign: 'right',
+  },
+
+  // Footer
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderColor: '#334155',
+  },
+  divisionLabel: {
+    backgroundColor: 'rgba(255, 70, 85, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 70, 85, 0.3)',
+  },
+  divisionText: {
+    color: '#ff4655',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  statusLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 0, // Square dot
+    backgroundColor: '#22c55e',
+    marginRight: 6,
+  },
+  statusText: {
+    color: '#22c55e',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
 });

@@ -102,7 +102,7 @@ export default function MobaScheduleScreen({ navigation }) {
         onPress={() => {
             // Navigasi ke detail match atau simulasi
             if (item.status === 'scheduled') {
-                navigation.navigate('MobaMatch', { matchId: item.id });
+                navigation.navigate('MobaDraft', { matchId: item.id });
             }
         }}
       >
@@ -157,7 +157,7 @@ export default function MobaScheduleScreen({ navigation }) {
         {!isCompleted && (
              <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => navigation.navigate('MobaMatch', { matchId: item.id })}
+                onPress={() => navigation.navigate('MobaDraft', { matchId: item.id })}
              >
                 <Text style={styles.actionText}>ENTER LOBBY</Text>
                 <Ionicons name="arrow-forward" size={14} color="#fff" />
