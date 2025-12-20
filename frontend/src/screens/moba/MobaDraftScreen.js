@@ -1,528 +1,465 @@
 /**
- * MobaDraftScreen.js
- * Tampilan Draft Ban/Pick dengan gaya eSports Legends
- * Lokasi: frontend/src/screens/moba/MobaDraftScreen.js
+ * MobaDraftScreen
+ * Feature: SMART DRAFT SYSTEM + SEARCH BAR
+ * UX Update: Compact Grid & STRICT FILTERING (No Duplicates)
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Image,
+  TouchableOpacity,
   Dimensions,
-  ScrollView,
-  SafeAreaView
+  SafeAreaView,
+  StatusBar,
+  FlatList,
+  ActivityIndicator,
+  TextInput,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
-const { width, height } = Dimensions.get('window');
+import { theme } from '../../theme/theme';
+import { getPlayerAvatar } from '../../utils/PlayerAvatars';
 
-// --- MOCK DATA ---
-const ROLES = ['TOP', 'JUN', 'MID', 'ADC', 'SUP'];
+const { width } = Dimensions.get('window');
 
-// Data Hero (Pool)
-const HERO_POOL = Array.from({ length: 20 }).map((_, i) => ({
-  id: i + 1,
-  name: `Hero ${i + 1}`,
-  role: ROLES[i % 5],
-  image: `https://ui-avatars.com/api/?name=H${i+1}&background=random&color=fff`
-}));
+// --- CONSTANTS ---
+const ROLE_FILTERS = ['All', 'Jungle', 'Mid', 'Roam', 'Gold', 'Exp'];
 
-// State Awal Tim
-const INITIAL_TEAM_STATE = ROLES.map((role, index) => ({
-  role,
-  player: `Player ${index + 1}`,
-  hero: null, // Hero yang dipilih
-  locked: false
-}));
+// --- KOMPONEN KECIL ---
 
-export default function MobaDraftScreen({ navigation }) {
-  // --- STATE ---
-  const [blueTeam, setBlueTeam] = useState(INITIAL_TEAM_STATE);
-  const [redTeam, setRedTeam] = useState(INITIAL_TEAM_STATE);
-  const [bans, setBans] = useState({ blue: [], red: [] });
-  const [phase, setPhase] = useState('BAN'); // BAN, PICK, SWAP
-  const [turn, setTurn] = useState('blue'); // blue, red
-  const [activeSlot, setActiveSlot] = useState(0); // Slot index yang sedang memilih
-  const [selectedHero, setSelectedHero] = useState(null);
+const PlayerSlot = ({ player, isEnemy }) => {
+    const avatarSource = getPlayerAvatar(player.role);
+    const heroImage = player.hero ? { uri: player.hero.image } : null;
+    const isFilled = !!player.hero;
 
-  // --- ACTIONS ---
-  const handleHeroSelect = (hero) => {
-    // Validasi: Apakah hero sudah dipick/ban?
-    const isPicked = [...blueTeam, ...redTeam].some(s => s.hero?.id === hero.id);
-    const isBanned = [...bans.blue, ...bans.red].some(b => b.id === hero.id);
-    
-    if (isPicked || isBanned) return;
-    
-    setSelectedHero(hero);
-  };
+    return (
+        <Animatable.View 
+            animation={isEnemy ? "fadeInRight" : "fadeInLeft"} 
+            style={[styles.slotContainer, isEnemy && styles.slotContainerEnemy]}
+        >
+            <LinearGradient
+                colors={isFilled ? [theme.colors.accent.gold + '20', theme.colors.accent.gold + '05'] : ['rgba(30, 41, 59, 0.9)', 'rgba(15, 23, 42, 0.95)']}
+                style={[styles.slotGradient, isFilled && styles.slotGradientFilled]}
+            >
+                <View style={[styles.slotContent, isEnemy && styles.slotContentEnemy]}>
+                    <View style={styles.avatarContainer}>
+                        <Image source={avatarSource} style={styles.avatarImage} />
+                        {!isEnemy && (
+                            <Text style={styles.playerNameSmall} numberOfLines={1}>{player.name}</Text>
+                        )}
+                        <Text style={styles.roleLabelSmall}>{player.role.toUpperCase()}</Text>
+                    </View>
 
-  const handleLock = () => {
-    if (!selectedHero) return;
+                    <View style={styles.pickStatus}>
+                        {isFilled ? (
+                            <Text style={styles.pickedText}>{player.hero.name.toUpperCase()}</Text>
+                        ) : (
+                            <Text style={styles.waitingText}>WAITING...</Text>
+                        )}
+                    </View>
 
-    if (phase === 'BAN') {
-      // Logika Ban Sederhana
-      setBans(prev => ({
-        ...prev,
-        [turn]: [...prev[turn], selectedHero]
-      }));
-      // Ganti giliran atau pindah fase (Mock Logic)
-      if (bans.blue.length + bans.red.length >= 5) {
-        setPhase('PICK');
-        setTurn('blue');
-      } else {
-        setTurn(turn === 'blue' ? 'red' : 'blue');
-      }
-    } else if (phase === 'PICK') {
-      // Logika Pick
-      const updateTeam = turn === 'blue' ? setBlueTeam : setRedTeam;
-      
-      updateTeam(prev => {
-        const newState = [...prev];
-        newState[activeSlot] = { ...newState[activeSlot], hero: selectedHero, locked: true };
-        return newState;
-      });
+                    <View style={[styles.heroContainer, isFilled && styles.heroContainerFilled]}>
+                        {heroImage ? (
+                            <Image source={heroImage} style={styles.heroImage} resizeMode="cover" />
+                        ) : (
+                             <View style={styles.heroPlaceholder}>
+                                <MaterialCommunityIcons name="help" size={20} color={theme.colors.text.secondary} />
+                             </View>
+                        )}
+                    </View>
+                </View>
+            </LinearGradient>
+        </Animatable.View>
+    );
+};
 
-      // Lanjut ke slot berikutnya
-      if (turn === 'red') setActiveSlot(prev => prev + 1);
-      setTurn(turn === 'blue' ? 'red' : 'blue');
-    }
-    
-    setSelectedHero(null);
-  };
+const HeroGridItem = ({ hero, onPress, isDisabled, isSelected }) => (
+    <TouchableOpacity 
+        style={[
+            styles.heroGridItem, 
+            isDisabled && styles.heroGridItemDisabled,
+            isSelected && styles.heroGridItemSelected
+        ]} 
+        onPress={onPress}
+        disabled={isDisabled}
+    >
+        <Image source={{ uri: hero.image }} style={styles.heroGridImage} resizeMode="cover" />
+        
+        <View style={styles.heroNameOverlay}>
+            <Text style={styles.heroNameText} numberOfLines={1}>{hero.name}</Text>
+        </View>
+        
+        {/* Role Badge */}
+        <View style={styles.gridRoleBadge}>
+            <Text style={styles.gridRoleText}>{hero.primaryRole?.charAt(0)}</Text>
+        </View>
 
-  // --- SUB-COMPONENTS ---
-
-  // 1. Slot Pemain Vertikal (Kiri/Kanan)
-  const TeamSlot = ({ data, isRight, isActive }) => (
-    <View style={[styles.slotContainer, isRight && styles.slotRight, isActive && styles.slotActive]}>
-      {/* Role Badge */}
-      <View style={[styles.roleBadge, { backgroundColor: getRoleColor(data.role) }]}>
-        <Text style={styles.roleText}>{data.role}</Text>
-      </View>
-
-      {/* Hero Image / Placeholder */}
-      <View style={styles.heroFrame}>
-        {data.hero ? (
-          <Image source={{ uri: data.hero.image }} style={styles.heroImg} />
-        ) : (
-          <View style={styles.emptyHero} />
+        {isDisabled && (
+             <View style={styles.disabledOverlay}>
+                <MaterialCommunityIcons name="check" size={24} color="#10b981" />
+             </View>
         )}
-      </View>
+    </TouchableOpacity>
+);
 
-      {/* Info Pemain */}
-      <View style={[styles.playerInfo, isRight && { alignItems: 'flex-end' }]}>
-        <Text style={styles.playerName}>{data.player}</Text>
-        <Text style={styles.heroName}>{data.hero ? data.hero.name : 'Picking...'}</Text>
-      </View>
-    </View>
-  );
+// --- MAIN SCREEN ---
+export default function MobaDraftScreen({ navigation, route }) {
+  const [timer, setTimer] = useState(30);
+  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const [heroPool, setHeroPool] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // 2. Ban Slot (Kecil di Atas)
-  const BanSlot = ({ hero }) => (
-    <View style={styles.banSlot}>
-      {hero ? (
-        <Image source={{ uri: hero.image }} style={styles.banImg} />
-      ) : (
-        <Text style={styles.banPlaceholder}>🚫</Text>
-      )}
-    </View>
-  );
+  // State Teams
+  const [myTeam, setMyTeam] = useState([
+    { id: 1, name: 'Player 1', role: 'jungle', hero: null },
+    { id: 2, name: 'Player 2', role: 'mid', hero: null },
+    { id: 3, name: 'Player 3', role: 'roam', hero: null },
+    { id: 4, name: 'Player 4', role: 'gold', hero: null },
+    { id: 5, name: 'Player 5', role: 'exp', hero: null },
+  ]);
 
-  // 3. Grafik Radar (Statistik Tim)
-  const TeamRadar = ({ color }) => (
-    <View style={styles.radarContainer}>
-      <View style={[styles.radarShape, { borderColor: color }]}>
-        <View style={[styles.radarFill, { backgroundColor: color }]} />
-      </View>
-      {/* Label Stat */}
-      <Text style={[styles.statLabel, { top: 0 }]}>ATK</Text>
-      <Text style={[styles.statLabel, { bottom: 0, left: 0 }]}>DEF</Text>
-      <Text style={[styles.statLabel, { bottom: 0, right: 0 }]}>MAG</Text>
-    </View>
-  );
+  const [enemyTeam, setEnemyTeam] = useState([
+    { id: 6, name: 'Enemy 1', role: 'exp', hero: null },
+    { id: 7, name: 'Enemy 2', role: 'gold', hero: null },
+    { id: 8, name: 'Enemy 3', role: 'mid', hero: null },
+    { id: 9, name: 'Enemy 4', role: 'roam', hero: null },
+    { id: 10, name: 'Enemy 5', role: 'jungle', hero: null },
+  ]);
+
+  const [tempSelectedHero, setTempSelectedHero] = useState(null);
+
+  // FETCH DATA
+  useEffect(() => {
+    const fetchLoLHeroes = async () => {
+        try {
+            const versionRes = await fetch('https://ddragon.leagueoflegends.com/api/versions.json');
+            const versions = await versionRes.json();
+            const latestVersion = versions[0];
+
+            const champRes = await fetch(`https://ddragon.leagueoflegends.com/cdn/${latestVersion}/data/en_US/champion.json`);
+            const champData = await champRes.json();
+            const champions = Object.values(champData.data);
+
+            const formattedHeroes = champions.map(hero => {
+                const tags = hero.tags;
+                let primaryRole = 'Exp'; // Default
+                
+                // --- STRICT MAPPING LOGIC (CLEAN FILTER) ---
+                // Menggunakan if-else if agar satu hero HANYA punya SATU role untuk sorting
+                
+                if (tags.includes('Marksman')) {
+                    primaryRole = 'Gold';
+                } 
+                else if (tags.includes('Support')) {
+                    primaryRole = 'Roam';
+                }
+                else if (tags.includes('Assassin')) {
+                    primaryRole = 'Jungle';
+                }
+                else if (tags.includes('Mage')) {
+                    primaryRole = 'Mid';
+                }
+                else if (tags.includes('Tank')) {
+                    primaryRole = 'Roam'; // Tank masuk Roam di MLBB meta
+                }
+                else {
+                    primaryRole = 'Exp'; // Fighter & Lainnya masuk Exp
+                }
+
+                return {
+                    id: hero.key,
+                    name: hero.name,
+                    image: `https://ddragon.leagueoflegends.com/cdn/${latestVersion}/img/champion/${hero.image.full}`,
+                    roles: [primaryRole], // Set array cuma isi 1 role utama agar filter bersih
+                    primaryRole: primaryRole,
+                    isPicked: false 
+                };
+            });
+
+            // LOGIC BUCKET LIMIT (Maks 8 per Role)
+            const roleBuckets = {
+                'Jungle': [], 'Mid': [], 'Roam': [], 'Gold': [], 'Exp': []
+            };
+
+            formattedHeroes.forEach(hero => {
+                if (roleBuckets[hero.primaryRole]) {
+                    roleBuckets[hero.primaryRole].push(hero);
+                }
+            });
+
+            // Ambil maks 8 dari tiap bucket
+            let limitedPool = [];
+            Object.keys(roleBuckets).forEach(role => {
+                const sliced = roleBuckets[role].slice(0, 8); 
+                limitedPool = [...limitedPool, ...sliced];
+            });
+
+            setHeroPool(limitedPool);
+            setLoading(false);
+        } catch (error) {
+            console.error("Error:", error);
+            setLoading(false);
+        }
+    };
+    fetchLoLHeroes();
+  }, []);
+
+  // LOGIC SELECT
+  const handleSelectHero = (hero) => {
+      if (hero.isPicked) return;
+      const targetRole = hero.primaryRole.toLowerCase();
+      const targetPlayer = myTeam.find(p => p.role === targetRole);
+
+      if (!targetPlayer) {
+          Alert.alert("Role Mismatch", `Hero ini khusus role ${hero.primaryRole}.`);
+          return;
+      }
+      if (targetPlayer.hero) {
+          Alert.alert("Slot Full", `Slot ${hero.primaryRole} sudah terisi.`);
+          return;
+      }
+      setTempSelectedHero(hero);
+  };
+
+  // LOGIC LOCK IN
+  const handleLockIn = () => {
+      if (!tempSelectedHero) return;
+      const targetRole = tempSelectedHero.primaryRole.toLowerCase();
+      
+      const updatedTeam = myTeam.map(player => 
+          player.role === targetRole ? { ...player, hero: tempSelectedHero } : player
+      );
+      setMyTeam(updatedTeam);
+
+      const updatedPool = heroPool.map(h => 
+          h.id === tempSelectedHero.id ? { ...h, isPicked: true } : h
+      );
+      setHeroPool(updatedPool);
+      setTempSelectedHero(null);
+      setSearchQuery(''); 
+
+      if (updatedTeam.every(p => p.hero !== null)) {
+          Alert.alert("Draft Complete", "Semua hero dipilih!", [
+              { text: "START MATCH", onPress: () => navigation.navigate('MobaMatch', { myTeam: updatedTeam }) }
+          ]);
+      }
+  };
+
+  const filteredHeroes = heroPool.filter(hero => {
+      const roleMatch = selectedFilter === 'All' || hero.roles.includes(selectedFilter);
+      const searchMatch = hero.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return roleMatch && searchMatch;
+  });
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* === HEADER BAR === */}
-      <View style={styles.header}>
-        <View style={styles.teamTitleBox}>
-          <View style={[styles.teamLogo, { backgroundColor: '#3b82f6' }]} />
-          <Text style={styles.teamTitleText}>E-LEGEND</Text>
-        </View>
-        
-        <View style={styles.phaseBox}>
-          <Text style={styles.phaseText}>
-            {phase === 'BAN' ? 'BAN PHASE' : `PICKING: ${turn.toUpperCase()}`}
-          </Text>
-          <Text style={styles.timerText}>28</Text>
-        </View>
+      <StatusBar hidden />
+      <LinearGradient colors={['#0f172a', '#1e293b', '#0f172a']} style={StyleSheet.absoluteFillObject} />
 
-        <View style={[styles.teamTitleBox, { flexDirection: 'row-reverse' }]}>
-          <View style={[styles.teamLogo, { backgroundColor: '#ef4444' }]} />
-          <Text style={styles.teamTitleText}>GREY FOX</Text>
-        </View>
+      {/* HEADER */}
+      <View style={styles.header}>
+          <View style={styles.teamHeaderLeft}>
+              <MaterialCommunityIcons name="shield-account" size={24} color={theme.colors.accent.gold} />
+              <Text style={styles.teamName}>PHANTOM</Text>
+          </View>
+          <View style={styles.scoreTimerContainer}>
+              <View style={styles.timerBadge}>
+                  <Text style={styles.timerText}>{timer}</Text>
+              </View>
+              <Text style={styles.phaseText}>
+                  {tempSelectedHero ? `LOCKING ${tempSelectedHero.name.toUpperCase()}...` : "PICK PHASE"}
+              </Text>
+          </View>
+          <View style={styles.teamHeaderRight}>
+              <Text style={styles.teamName}>TITAN</Text>
+              <MaterialCommunityIcons name="shield-account-outline" size={24} color={theme.colors.text.secondary} />
+          </View>
       </View>
 
-      {/* === MAIN CONTENT (3 COLUMNS) === */}
-      <View style={styles.mainContent}>
-        
-        {/* KOLOM KIRI: TIM BIRU */}
-        <View style={styles.sideColumn}>
-          {blueTeam.map((slot, i) => (
-            <TeamSlot 
-              key={i} 
-              data={slot} 
-              isRight={false} 
-              isActive={turn === 'blue' && phase === 'PICK' && activeSlot === i} 
-            />
-          ))}
-          <View style={styles.radarWrapper}>
-            <TeamRadar color="#3b82f6" />
-          </View>
-        </View>
-
-        {/* KOLOM TENGAH: BAN & SELECTION */}
-        <View style={styles.centerColumn}>
+      <View style={styles.contentRow}>
           
-          {/* BAN HEADER */}
-          <View style={styles.banHeader}>
-            <View style={styles.banGroup}>
-              {[0,1,2].map(i => <BanSlot key={i} hero={bans.blue[i]} />)}
-            </View>
-            <Text style={styles.vsText}>BANS</Text>
-            <View style={styles.banGroup}>
-              {[0,1,2].map(i => <BanSlot key={i} hero={bans.red[i]} />)}
-            </View>
+          {/* LEFT: MY TEAM */}
+          <View style={styles.sideColumn}>
+              {myTeam.map(p => (
+                  <PlayerSlot key={p.id} player={p} isEnemy={false} />
+              ))}
           </View>
 
-          {/* HERO GRID (SELECTION) */}
-          <View style={styles.heroGridContainer}>
-            <ScrollView contentContainerStyle={styles.heroGrid}>
-              {HERO_POOL.map((hero) => {
-                const isSelected = selectedHero?.id === hero.id;
-                // Cek status disabled (sudah dipick/ban)
-                const isUsed = [...blueTeam, ...redTeam].some(s => s.hero?.id === hero.id) ||
-                               [...bans.blue, ...bans.red].some(b => b.id === hero.id);
+          {/* CENTER: SEARCH & HERO GRID */}
+          <View style={styles.centerColumn}>
+              
+              {/* SEARCH BAR */}
+              <View style={styles.searchContainer}>
+                  <Ionicons name="search" size={16} color="#94a3b8" style={{marginRight: 8}} />
+                  <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search Hero..."
+                      placeholderTextColor="#64748b"
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                  />
+                  {searchQuery !== '' && (
+                      <TouchableOpacity onPress={() => setSearchQuery('')}>
+                          <Ionicons name="close-circle" size={16} color="#64748b" />
+                      </TouchableOpacity>
+                  )}
+              </View>
 
-                return (
-                  <TouchableOpacity
-                    key={hero.id}
-                    style={[
-                      styles.gridItem,
-                      isSelected && styles.gridItemSelected,
-                      isUsed && styles.gridItemDisabled
-                    ]}
-                    onPress={() => handleHeroSelect(hero)}
-                    disabled={isUsed}
-                  >
-                    <Image source={{ uri: hero.image }} style={styles.gridHeroImg} />
-                    {isUsed && <View style={styles.usedOverlay}><Text>❌</Text></View>}
-                    <Text style={styles.gridHeroName} numberOfLines={1}>{hero.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+              {/* FILTER BUTTONS */}
+              <View style={styles.filterRow}>
+                  {ROLE_FILTERS.map(filter => (
+                      <TouchableOpacity 
+                        key={filter} 
+                        style={[styles.filterBtn, selectedFilter === filter && styles.filterBtnActive]}
+                        onPress={() => setSelectedFilter(filter)}
+                      >
+                          <Text style={[styles.filterText, selectedFilter === filter && styles.filterTextActive]}>
+                              {filter.toUpperCase()}
+                          </Text>
+                      </TouchableOpacity>
+                  ))}
+              </View>
+
+              {/* HERO GRID (4 COLUMNS) */}
+              {loading ? (
+                  <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="large" color={theme.colors.accent.gold} />
+                  </View>
+              ) : (
+                  <FlatList
+                      data={filteredHeroes}
+                      keyExtractor={item => item.id.toString()}
+                      numColumns={4}
+                      renderItem={({ item }) => (
+                          <HeroGridItem 
+                            hero={item} 
+                            onPress={() => handleSelectHero(item)}
+                            isDisabled={item.isPicked} 
+                            isSelected={tempSelectedHero?.id === item.id}
+                          />
+                      )}
+                      contentContainerStyle={styles.heroGridContent}
+                      showsVerticalScrollIndicator={false}
+                      ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyText}>No heroes found</Text>
+                        </View>
+                    }
+                  />
+              )}
+
+              {/* LOCK IN BUTTON */}
+              <TouchableOpacity 
+                style={[styles.confirmBtn, !tempSelectedHero && styles.confirmBtnDisabled]}
+                onPress={handleLockIn}
+                disabled={!tempSelectedHero}
+              >
+                  <Text style={[styles.confirmBtnText, !tempSelectedHero && styles.confirmBtnTextDisabled]}>
+                      {tempSelectedHero ? "LOCK IN" : "SELECT"}
+                  </Text>
+              </TouchableOpacity>
           </View>
 
-          {/* ACTION BUTTONS */}
-          <View style={styles.actionFooter}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#10B981' }]}>
-              <Text style={styles.btnText}>LINEUP EFFECT</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionBtn, styles.lockBtn, !selectedHero && { opacity: 0.5 }]}
-              onPress={handleLock}
-              disabled={!selectedHero}
-            >
-              <Text style={styles.lockBtnText}>LOCK IN</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#6B7280' }]}>
-              <Text style={styles.btnText}>AUTO BAN</Text>
-            </TouchableOpacity>
+          {/* RIGHT: ENEMY TEAM */}
+          <View style={styles.sideColumn}>
+              {enemyTeam.map(p => (
+                  <PlayerSlot key={p.id} player={p} isEnemy={true} />
+              ))}
           </View>
-
-        </View>
-
-        {/* KOLOM KANAN: TIM MERAH */}
-        <View style={styles.sideColumn}>
-          {redTeam.map((slot, i) => (
-            <TeamSlot 
-              key={i} 
-              data={slot} 
-              isRight={true} 
-              isActive={turn === 'red' && phase === 'PICK' && activeSlot === i} 
-            />
-          ))}
-          <View style={styles.radarWrapper}>
-            <TeamRadar color="#ef4444" />
-          </View>
-        </View>
 
       </View>
     </SafeAreaView>
   );
 }
 
-// --- HELPERS ---
-const getRoleColor = (role) => {
-  switch(role) {
-    case 'TOP': return '#ef4444'; // Merah
-    case 'JUN': return '#22c55e'; // Hijau
-    case 'MID': return '#3b82f6'; // Biru
-    case 'ADC': return '#eab308'; // Kuning
-    case 'SUP': return '#a855f7'; // Ungu
-    default: return '#6b7280';
-  }
-};
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a', // Background Gelap
-  },
-  // --- HEADER ---
-  header: {
-    height: 60,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    paddingHorizontal: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: '#334155',
-  },
-  teamTitleBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 120,
-  },
-  teamLogo: {
-    width: 40, 
-    height: 40,
-    borderRadius: 5,
-    marginHorizontal: 5,
-  },
-  teamTitleText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    fontStyle: 'italic',
-  },
-  phaseBox: {
-    alignItems: 'center',
-  },
-  phaseText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  timerText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-  },
+  container: { flex: 1, backgroundColor: '#0f172a' },
+  
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(15, 23, 42, 0.9)', borderBottomWidth: 1, borderColor: theme.colors.accent.gold + '30' },
+  teamHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  teamHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  teamName: { color: '#fff', fontWeight: 'bold', fontSize: 12, letterSpacing: 1 },
+  scoreTimerContainer: { alignItems: 'center' },
+  timerBadge: { backgroundColor: 'rgba(245, 158, 11, 0.1)', paddingHorizontal: 12, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: theme.colors.accent.gold },
+  timerText: { color: theme.colors.accent.gold, fontWeight: '900', fontSize: 16 },
+  phaseText: { color: theme.colors.text.secondary, fontSize: 10, fontWeight: 'bold', marginTop: 4 },
 
-  // --- MAIN LAYOUT ---
-  mainContent: {
-    flex: 1,
-    flexDirection: 'row',
-    padding: 5,
-  },
-  sideColumn: {
-    width: 80, // Kolom Tim (Kecil agar muat Grid tengah)
-    justifyContent: 'flex-start',
-    gap: 5,
-  },
-  centerColumn: {
-    flex: 1, // Mengisi sisa ruang
-    marginHorizontal: 5,
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
-    borderRadius: 10,
-    padding: 5,
-    justifyContent: 'space-between',
-  },
+  // Layout
+  contentRow: { flex: 1, flexDirection: 'row', padding: 4 },
+  sideColumn: { width: '25%', justifyContent: 'space-evenly', paddingVertical: 4 },
+  centerColumn: { flex: 1, marginHorizontal: 4, backgroundColor: 'rgba(30, 41, 59, 0.3)', borderRadius: 8, padding: 4, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)', position: 'relative' },
 
-  // --- TEAM SLOT ---
-  slotContainer: {
-    height: 65,
-    backgroundColor: '#1e293b',
-    borderRadius: 5,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6', // Default Blue
-    padding: 2,
-    position: 'relative',
-    overflow: 'hidden',
+  // Search
+  searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      marginBottom: 6,
+      height: 36,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)'
   },
-  slotRight: {
-    borderLeftWidth: 0,
-    borderRightWidth: 3,
-    borderRightColor: '#ef4444',
-  },
-  slotActive: {
-    borderColor: '#eab308',
-    borderWidth: 2,
-  },
-  roleBadge: {
-    position: 'absolute',
-    top: 2,
-    left: 2,
-    zIndex: 10,
-    paddingHorizontal: 3,
-    borderRadius: 3,
-  },
-  roleText: { color: '#fff', fontSize: 8, fontWeight: 'bold' },
-  heroFrame: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-    opacity: 0.6,
-  },
-  heroImg: { width: '100%', height: '100%', resizeMode: 'cover' },
-  emptyHero: { flex: 1, backgroundColor: '#334155' },
-  playerInfo: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: 2,
-    paddingHorizontal: 4,
-  },
-  playerName: { color: '#fff', fontSize: 10, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 2 },
-  heroName: { color: '#cbd5e1', fontSize: 8 },
+  searchInput: { flex: 1, color: '#fff', fontSize: 12 },
 
-  // --- BAN HEADER ---
-  banHeader: {
-    height: 50,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    borderRadius: 5,
-    marginBottom: 5,
-  },
-  banGroup: { flexDirection: 'row', gap: 5 },
-  banSlot: {
-    width: 30,
-    height: 30,
-    backgroundColor: '#334155',
-    borderRadius: 3,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#475569',
-  },
-  banImg: { width: '100%', height: '100%', borderRadius: 2 },
-  banPlaceholder: { fontSize: 10 },
-  vsText: { color: '#64748b', fontSize: 10, fontWeight: 'bold', marginHorizontal: 10 },
+  // Slot Logic Styles
+  slotContainer: { height: 55, marginBottom: 4 },
+  slotContainerEnemy: { alignItems: 'flex-end' },
+  slotGradient: { flex: 1, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' },
+  slotGradientFilled: { borderColor: theme.colors.accent.gold },
+  slotContent: { flexDirection: 'row', alignItems: 'center', padding: 2, height: '100%' },
+  slotContentEnemy: { flexDirection: 'row-reverse' }, 
 
-  // --- HERO GRID ---
-  heroGridContainer: {
-    flex: 1,
-    backgroundColor: '#1e293b',
-    borderRadius: 5,
-    padding: 5,
-  },
-  heroGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  gridItem: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#334155',
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#475569',
-    overflow: 'hidden',
-  },
-  gridItemSelected: {
-    borderColor: '#eab308',
-    borderWidth: 2,
-  },
-  gridItemDisabled: {
-    opacity: 0.4,
-  },
-  gridHeroImg: { width: '100%', height: '100%' },
-  usedOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0,0,0,0.6)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  gridHeroName: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    color: '#fff',
-    fontSize: 8,
-    textAlign: 'center',
-  },
+  avatarContainer: { alignItems: 'center', marginHorizontal: 4, width: 40 },
+  avatarImage: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#64748b' },
+  playerNameSmall: { color: '#fff', fontSize: 7, marginTop: 1, textAlign: 'center', width: '100%' },
+  roleLabelSmall: { color: theme.colors.accent.gold, fontSize: 6, fontWeight: 'bold', marginTop: 1 },
 
-  // --- FOOTER ACTIONS ---
-  actionFooter: {
-    height: 50,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 5,
-    marginHorizontal: 2,
-  },
-  lockBtn: {
-    backgroundColor: '#3b82f6',
-    flex: 2, // Lebih besar
-    height: 45,
-    borderWidth: 2,
-    borderColor: '#60a5fa',
-  },
-  btnText: { color: '#fff', fontSize: 8, fontWeight: 'bold' },
-  lockBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
+  pickStatus: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  pickedText: { color: theme.colors.accent.gold, fontSize: 8, fontWeight: 'bold', textAlign: 'center' },
+  waitingText: { color: '#64748b', fontSize: 7, textAlign: 'center' },
 
-  // --- RADAR MOCK ---
-  radarWrapper: {
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 'auto',
-  },
-  radarContainer: {
-    width: 60,
-    height: 60,
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  radarShape: {
-    width: 40,
-    height: 40,
-    borderWidth: 1,
-    transform: [{ rotate: '45deg' }], // Diamond shape
-  },
-  radarFill: {
-    width: 25,
-    height: 25,
-    opacity: 0.5,
-    position: 'absolute',
-    top: 7,
-    left: 7,
-  },
-  statLabel: {
-    position: 'absolute',
-    color: '#64748b',
-    fontSize: 6,
-    fontWeight: 'bold',
-  },
+  heroContainer: { width: 40, height: 40, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', marginRight: 4 },
+  heroContainerFilled: { borderColor: theme.colors.accent.gold, borderWidth: 1 },
+  heroImage: { width: '100%', height: '100%' },
+  heroPlaceholder: { flex: 1, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' },
+
+  // Filters
+  filterRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  filterBtn: { paddingVertical: 4, paddingHorizontal: 4, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.05)', flex: 1, marginHorizontal: 1, alignItems: 'center' },
+  filterBtnActive: { backgroundColor: theme.colors.accent.gold },
+  filterText: { color: theme.colors.text.secondary, fontSize: 7, fontWeight: 'bold' },
+  filterTextActive: { color: '#0f172a' },
+
+  // Grid
+  heroGridContent: { paddingBottom: 60 },
+  heroGridItem: { flex: 1, aspectRatio: 1, margin: 2, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', position: 'relative' },
+  heroGridItemSelected: { borderColor: theme.colors.accent.gold, borderWidth: 2 },
+  heroGridItemDisabled: { opacity: 0.3 },
+  heroGridImage: { width: '100%', height: '100%' },
+  heroNameOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.8)', paddingVertical: 2, alignItems: 'center' },
+  heroNameText: { color: '#fff', fontSize: 7, fontWeight: 'bold', textAlign: 'center' },
+  gridRoleBadge: { position: 'absolute', top: 2, right: 2, backgroundColor: theme.colors.accent.gold, width: 10, height: 10, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  gridRoleText: { fontSize: 6, fontWeight: 'bold', color: '#000' },
+  
+  disabledOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+
+  // Button
+  confirmBtn: { position: 'absolute', bottom: 6, left: 6, right: 6, backgroundColor: theme.colors.accent.gold, paddingVertical: 10, borderRadius: 6, alignItems: 'center', elevation: 5 },
+  confirmBtnDisabled: { backgroundColor: '#334155', elevation: 0 },
+  confirmBtnText: { color: '#0f172a', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
+  confirmBtnTextDisabled: { color: '#94a3b8' },
+
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 40 },
+  emptyText: { color: '#64748b' }
 });
