@@ -35,7 +35,7 @@ export default function TacticalTeamScreen({ navigation }) {
     try {
       const teamId = user?.team_id || 5;
       const response = await apiClient.get(`/api/players/?team_id=${teamId}&division=tactical`);
-      
+
       if (response.data && response.data.items) {
         setRoster(response.data.items);
       } else {
@@ -63,85 +63,85 @@ export default function TacticalTeamScreen({ navigation }) {
   const renderPlayerCard = ({ item, index }) => {
     // Logic Role & Avatar
     const rawRole = item.role || item.position || item.current_role || 'Unknown';
-    const avatarSource = getPlayerAvatar(rawRole);
+    const avatarSource = getPlayerAvatar(item.id);
 
     return (
-      <Animatable.View 
+      <Animatable.View
         animation="fadeInRight" // Animasi dari kanan biar beda dikit sama MOBA
-        delay={index * 100} 
+        delay={index * 100}
         style={styles.cardWrapper}
       >
         <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('PlayerProfile', { player: item })}
+          activeOpacity={0.9}
+          onPress={() => navigation.navigate('PlayerProfile', { player: item })}
         >
-            <LinearGradient
-                // Warna Gradient: Slate Gelap ke Sedikit Merah Gelap
-                colors={['rgba(30, 41, 59, 0.95)', 'rgba(15, 23, 42, 0.95)']}
-                style={styles.cardGradient}
-            >
-                {/* Aksen Garis Merah di Kiri */}
-                <View style={styles.accentBorder} />
+          <LinearGradient
+            // Warna Gradient: Slate Gelap ke Sedikit Merah Gelap
+            colors={['rgba(30, 41, 59, 0.95)', 'rgba(15, 23, 42, 0.95)']}
+            style={styles.cardGradient}
+          >
+            {/* Aksen Garis Merah di Kiri */}
+            <View style={styles.accentBorder} />
 
-                <View style={styles.cardContent}>
-                    
-                    {/* [BAGIAN 1] AVATAR (Kiri) - Style Valorant (Hexagon/Sharp) */}
-                    <View style={styles.avatarSection}>
-                        <View style={styles.avatarContainer}>
-                            <Image 
-                                source={avatarSource} 
-                                style={styles.avatarImage} 
-                                resizeMode="cover"
-                            />
-                            <View style={styles.roleBadgeSmall}>
-                                 <Text style={styles.roleBadgeText}>
-                                    {rawRole !== 'Unknown' ? rawRole.charAt(0).toUpperCase() : '?'}
-                                 </Text>
-                            </View>
-                        </View>
-                    </View>
+            <View style={styles.cardContent}>
 
-                    {/* [BAGIAN 2] INFO UTAMA (Kanan) */}
-                    <View style={styles.infoSection}>
-                        {/* Header: Role & OVR */}
-                        <View style={styles.cardHeader}>
-                            <Text style={styles.roleTitle}>{rawRole.toUpperCase()}</Text>
-                            <View style={styles.ovrBadge}>
-                                <Text style={styles.ovrText}>OVR {item.overall_rating || item.ovr || 50}</Text>
-                            </View>
-                        </View>
-
-                        {/* Nama Pemain - Font Italic ala FPS */}
-                        <Text style={styles.ignText} numberOfLines={1}>
-                            {item.ign || item.username || item.name || 'AGENT'}
-                        </Text>
-
-                        <View style={styles.separator} />
-
-                        {/* Stats Grid - Mapping Tactical Stats */}
-                        <View style={styles.statsGrid}>
-                            <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>AIM</Text>
-                                <Text style={styles.statValue}>{item.tactical_aim || '-'}</Text>
-                            </View>
-                            <View style={styles.statCol}>
-                                 <Text style={styles.statLabel}>SENSE</Text>
-                                 <Text style={styles.statValue}>{item.tactical_gamesense || '-'}</Text>
-                            </View>
-                            <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>UTIL</Text>
-                                <Text style={styles.statValue}>{item.tactical_utility || '-'}</Text>
-                            </View>
-                             <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>CLUTCH</Text>
-                                <Text style={styles.statValue}>{item.tactical_clutch || '-'}</Text>
-                            </View>
-                        </View>
-                        
-                        <Text style={styles.teamName}>PROTOCOL ID: #{item.id}</Text>
-                    </View>
+              {/* [BAGIAN 1] AVATAR (Kiri) - Style Valorant (Hexagon/Sharp) */}
+              <View style={styles.avatarSection}>
+                <View style={styles.avatarContainer}>
+                  <Image
+                    source={avatarSource}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.roleBadgeSmall}>
+                    <Text style={styles.roleBadgeText}>
+                      {rawRole !== 'Unknown' ? rawRole.charAt(0).toUpperCase() : '?'}
+                    </Text>
+                  </View>
                 </View>
-            </LinearGradient>
+              </View>
+
+              {/* [BAGIAN 2] INFO UTAMA (Kanan) */}
+              <View style={styles.infoSection}>
+                {/* Header: Role & OVR */}
+                <View style={styles.cardHeader}>
+                  <Text style={styles.roleTitle}>{rawRole.toUpperCase()}</Text>
+                  <View style={styles.ovrBadge}>
+                    <Text style={styles.ovrText}>OVR {item.overall_rating || item.ovr || 50}</Text>
+                  </View>
+                </View>
+
+                {/* Nama Pemain - Font Italic ala FPS */}
+                <Text style={styles.ignText} numberOfLines={1}>
+                  {item.ign || item.username || item.name || 'AGENT'}
+                </Text>
+
+                <View style={styles.separator} />
+
+                {/* Stats Grid - Mapping Tactical Stats */}
+                <View style={styles.statsGrid}>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>AIM</Text>
+                    <Text style={styles.statValue}>{item.tactical_aim || '-'}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>SENSE</Text>
+                    <Text style={styles.statValue}>{item.tactical_gamesense || '-'}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>UTIL</Text>
+                    <Text style={styles.statValue}>{item.tactical_utility || '-'}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>CLUTCH</Text>
+                    <Text style={styles.statValue}>{item.tactical_clutch || '-'}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.teamName}>PROTOCOL ID: #{item.id}</Text>
+              </View>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
       </Animatable.View>
     );
@@ -161,16 +161,16 @@ export default function TacticalTeamScreen({ navigation }) {
         colors={['#0f172a', '#1e293b', '#0f172a']}
         style={StyleSheet.absoluteFillObject}
       />
-      
+
       {/* HEADER TACTICAL STYLE */}
       <View style={styles.header}>
-         <View>
-            <Text style={styles.headerTitle}>TACTICAL ROSTER</Text>
-            <Text style={styles.headerSubtitle}>PROTOCOL: ALPHA • SEASON 1</Text>
-         </View>
-         <View style={styles.headerIcon}>
-            <MaterialCommunityIcons name="crosshairs-gps" size={24} color="#ff4655" />
-         </View>
+        <View>
+          <Text style={styles.headerTitle}>TACTICAL ROSTER</Text>
+          <Text style={styles.headerSubtitle}>PROTOCOL: ALPHA • SEASON 1</Text>
+        </View>
+        <View style={styles.headerIcon}>
+          <MaterialCommunityIcons name="crosshairs-gps" size={24} color="#ff4655" />
+        </View>
       </View>
 
       <FlatList
@@ -180,23 +180,23 @@ export default function TacticalTeamScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-            <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor="#ff4655"
-            />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#ff4655"
+          />
         }
       />
-      
+
       {/* FOOTER */}
       <View style={styles.footerRow}>
-         <View style={styles.divisionLabel}>
-            <Text style={styles.divisionText}>DIV: TACTICAL</Text>
-         </View>
-         <View style={styles.statusLabel}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusText}>ACTIVE</Text>
-         </View>
+        <View style={styles.divisionLabel}>
+          <Text style={styles.divisionText}>DIV: TACTICAL</Text>
+        </View>
+        <View style={styles.statusLabel}>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>ACTIVE</Text>
+        </View>
       </View>
     </View>
   );
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#0f172a',
   },
-  
+
   // Header Style (Tactical: Red Accent)
   header: {
     flexDirection: 'row',
@@ -273,19 +273,19 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   accentBorder: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 4,
-      backgroundColor: '#ff4655', // Red Sidebar
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: '#ff4655', // Red Sidebar
   },
   cardContent: {
     flexDirection: 'row', // Horizontal Layout (Sama kaya MOBA)
     padding: 16,
     paddingLeft: 20, // Extra padding karena ada accentBorder
   },
-  
+
   // -- Bagian Kiri: Avatar --
   avatarSection: {
     marginRight: 16,

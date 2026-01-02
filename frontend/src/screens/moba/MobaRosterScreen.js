@@ -32,10 +32,10 @@ export default function MobaRosterScreen({ navigation }) {
   // --- LOAD DATA ---
   const loadTeamData = async () => {
     try {
-      const teamId = user?.team_id || 5; 
-      
+      const teamId = user?.team_id || 5;
+
       const response = await apiClient.get(`/api/players/?team_id=${teamId}&division=moba`);
-      
+
       if (response.data && response.data.items) {
         setRoster(response.data.items);
       } else {
@@ -63,81 +63,81 @@ export default function MobaRosterScreen({ navigation }) {
   const renderPlayerCard = ({ item, index }) => {
     // [FIX] Cek berbagai kemungkinan nama field role untuk mengatasi "UNKNOWN"
     const rawRole = item.role || item.position || item.current_role || 'Unknown';
-    
-    // Ambil gambar avatar
-    const avatarSource = getPlayerAvatar(rawRole);
+
+    // Ambil gambar avatar based on ID now
+    const avatarSource = getPlayerAvatar(item.id);
 
     return (
-      <Animatable.View 
-        animation="fadeInUp" 
+      <Animatable.View
+        animation="fadeInUp"
         delay={index * 100}
         style={styles.cardWrapper}
       >
         {/* [FIX] Bungkus dengan TouchableOpacity agar bisa diklik */}
         <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('PlayerProfile', { player: item })}
+          activeOpacity={0.9}
+          onPress={() => navigation.navigate('PlayerProfile', { player: item })}
         >
-            <LinearGradient
+          <LinearGradient
             colors={['rgba(30, 41, 59, 0.9)', 'rgba(15, 23, 42, 0.95)']}
             style={styles.cardGradient}
-            >
-                <View style={styles.cardContent}>
-                    
-                    {/* [BAGIAN 1] AVATAR */}
-                    <View style={styles.avatarSection}>
-                        <View style={styles.avatarContainer}>
-                            <Image 
-                                source={avatarSource} 
-                                style={styles.avatarImage} 
-                                resizeMode="cover"
-                            />
-                            <View style={styles.roleBadgeSmall}>
-                                <Text style={styles.roleBadgeText}>
-                                    {rawRole !== 'Unknown' ? rawRole.charAt(0).toUpperCase() : '?'}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
+          >
+            <View style={styles.cardContent}>
 
-                    {/* [BAGIAN 2] INFO UTAMA */}
-                    <View style={styles.infoSection}>
-                        <View style={styles.cardHeader}>
-                            <Text style={styles.roleTitle}>{rawRole.toUpperCase()}</Text>
-                            <View style={styles.ovrBadge}>
-                                <Text style={styles.ovrText}>OVR {item.overall_rating || item.ovr || 50}</Text>
-                            </View>
-                        </View>
-
-                        <Text style={styles.ignText} numberOfLines={1}>
-                            {item.ign || item.username || item.name || 'Player'}
-                        </Text>
-
-                        <View style={styles.separator} />
-
-                        <View style={styles.statsGrid}>
-                            <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>MECHANIC</Text>
-                                <Text style={styles.statValue}>{item.mechanics || '-'}</Text>
-                            </View>
-                            <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>MACRO</Text>
-                                <Text style={styles.statValue}>{item.macro || '-'}</Text>
-                            </View>
-                            <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>KDA AVG</Text>
-                                <Text style={styles.statValue}>{item.kda_avg || '0.0'}</Text>
-                            </View>
-                            <View style={styles.statCol}>
-                                <Text style={styles.statLabel}>MATCHES</Text>
-                                <Text style={styles.statValue}>{item.matches_played || '0'}</Text>
-                            </View>
-                        </View>
-                        
-                        <Text style={styles.teamName}>Phantom Gaming</Text>
-                    </View>
+              {/* [BAGIAN 1] AVATAR */}
+              <View style={styles.avatarSection}>
+                <View style={styles.avatarContainer}>
+                  <Image
+                    source={avatarSource}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.roleBadgeSmall}>
+                    <Text style={styles.roleBadgeText}>
+                      {rawRole !== 'Unknown' ? rawRole.charAt(0).toUpperCase() : '?'}
+                    </Text>
+                  </View>
                 </View>
-            </LinearGradient>
+              </View>
+
+              {/* [BAGIAN 2] INFO UTAMA */}
+              <View style={styles.infoSection}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.roleTitle}>{rawRole.toUpperCase()}</Text>
+                  <View style={styles.ovrBadge}>
+                    <Text style={styles.ovrText}>OVR {item.overall_rating || item.ovr || 50}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.ignText} numberOfLines={1}>
+                  {item.ign || item.username || item.name || 'Player'}
+                </Text>
+
+                <View style={styles.separator} />
+
+                <View style={styles.statsGrid}>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>MECHANIC</Text>
+                    <Text style={styles.statValue}>{item.mechanics || '-'}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>MACRO</Text>
+                    <Text style={styles.statValue}>{item.macro || '-'}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>KDA AVG</Text>
+                    <Text style={styles.statValue}>{item.kda_avg || '0.0'}</Text>
+                  </View>
+                  <View style={styles.statCol}>
+                    <Text style={styles.statLabel}>MATCHES</Text>
+                    <Text style={styles.statValue}>{item.matches_played || '0'}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.teamName}>Phantom Gaming</Text>
+              </View>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
       </Animatable.View>
     );
@@ -157,15 +157,15 @@ export default function MobaRosterScreen({ navigation }) {
         colors={['#0f172a', '#1e293b', '#0f172a']}
         style={StyleSheet.absoluteFillObject}
       />
-      
+
       <View style={styles.header}>
-         <View>
-            <Text style={styles.headerTitle}>Active Roster</Text>
-            <Text style={styles.headerSubtitle}>MOBA Division • Season 1</Text>
-         </View>
-         <View style={styles.headerIcon}>
-            <MaterialCommunityIcons name="account-group" size={28} color={theme.colors.accent.gold} />
-         </View>
+        <View>
+          <Text style={styles.headerTitle}>Active Roster</Text>
+          <Text style={styles.headerSubtitle}>MOBA Division • Season 1</Text>
+        </View>
+        <View style={styles.headerIcon}>
+          <MaterialCommunityIcons name="account-group" size={28} color={theme.colors.accent.gold} />
+        </View>
       </View>
 
       <FlatList
@@ -175,28 +175,28 @@ export default function MobaRosterScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-            <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={theme.colors.accent.gold}
-            />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.accent.gold}
+          />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-             <MaterialCommunityIcons name="account-search" size={48} color="#64748b" />
-             <Text style={styles.emptyText}>No players found in roster.</Text>
+            <MaterialCommunityIcons name="account-search" size={48} color="#64748b" />
+            <Text style={styles.emptyText}>No players found in roster.</Text>
           </View>
         }
       />
-      
+
       <View style={styles.footerRow}>
-         <View style={styles.divisionLabel}>
-            <Text style={styles.divisionText}>DIV: MOBA</Text>
-         </View>
-         <View style={styles.statusLabel}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusText}>ONLINE</Text>
-         </View>
+        <View style={styles.divisionLabel}>
+          <Text style={styles.divisionText}>DIV: MOBA</Text>
+        </View>
+        <View style={styles.statusLabel}>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>ONLINE</Text>
+        </View>
       </View>
     </View>
   );

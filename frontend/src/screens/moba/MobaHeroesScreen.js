@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
 import { apiClient } from '../../services/ApiClient';
+import { getHeroImage } from '../../utils/HeroAssets';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3; // 3 Kolom biar muat banyak
@@ -31,7 +32,6 @@ export default function MobaHeroes({ navigation }) {
 
   const fetchHeroes = async () => {
     try {
-      // Asumsi endpoint ini ada di backend (standard CRUD)
       const response = await apiClient.get('/api/heroes/');
       if (response.data && response.data.items) {
         setHeroes(response.data.items);
@@ -46,18 +46,17 @@ export default function MobaHeroes({ navigation }) {
   const filterData = () => {
     let result = heroes;
 
-    // Filter by Role
+    // Filter by Role (checking hero_class)
     if (selectedRole !== 'All') {
-        // Backend mungkin nyimpen role lowercase atau uppercase, kita samain
-        result = result.filter(h => 
-            h.role_specific && h.role_specific.toLowerCase() === selectedRole.toLowerCase() 
-            || (h.description && h.description.includes(selectedRole)) // Fallback cek deskripsi
-        );
+      result = result.filter(h =>
+        (h.hero_class && h.hero_class.toLowerCase() === selectedRole.toLowerCase())
+        || (h.description && h.description.includes(selectedRole))
+      );
     }
 
     // Filter by Search
     if (search) {
-      result = result.filter(h => 
+      result = result.filter(h =>
         h.name.toLowerCase().includes(search.toLowerCase())
       );
     }
@@ -66,19 +65,20 @@ export default function MobaHeroes({ navigation }) {
   };
 
   const renderHeroCard = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.card}
       activeOpacity={0.7}
       onPress={() => navigation.navigate('HeroDetail', { hero: item })}
     >
-      <Image source={{ uri: item.image_url }} style={styles.heroImage} />
+      {/* [FIX] Use local asset utility */}
+      <Image source={getHeroImage(item.id)} style={styles.heroImage} />
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.8)', '#000']}
         style={styles.textOverlay}
       >
         <Text style={styles.heroName} numberOfLines={1}>{item.name}</Text>
       </LinearGradient>
-      
+
       {/* Power Badge (Optional) */}
       <View style={styles.powerBadge}>
         <Text style={styles.powerText}>{Math.round(item.base_power || 50)}</Text>
