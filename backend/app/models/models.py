@@ -3,7 +3,7 @@ Database Models for eSports MOBA Manager
 FIXED: Changed Enum Columns to String to prevent SQLAlchemy Validation Errors.
 Data integrity is still enforced by PostgreSQL Database and Pydantic Schemas.
 """
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum, Float, Table
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum, Float, Table, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -90,6 +90,10 @@ class Player(Base):
     hero_stats = relationship("HeroStat", back_populates="player")
     agent_stats = relationship("AgentStat", back_populates="player")
     
+    # [NEW] Assigned Signature Hero
+    assigned_hero_id = Column(Integer, ForeignKey('heroes.id'), nullable=True)
+    assigned_hero = relationship("Hero", foreign_keys=[assigned_hero_id])
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -100,6 +104,21 @@ class Hero(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text)
     image_url = Column(String(500))
+    icon_url = Column(String(500))  # [NEW] Icon URL
+    
+    # [NEW] MOBA Details
+    hero_class = Column(String(50), nullable=True)     # Fighter, Mage, etc.
+    specialty = Column(String(100), nullable=True)     # Burst, CC, etc.
+    lane = Column(String(50), nullable=True)           # Exp, Gold, Mid, etc.
+    release_year = Column(Integer, default=2024)
+    story = Column(Text, nullable=True)
+    resource_type = Column(String(30), default="Mana") # Mana, Energy, None
+    damage_type = Column(String(30), default="Physical") # Physical, Magic, True
+    
+    # [NEW] Detailed Stats (JSON for flexibility)
+    # { "sustain": 80, "damage": 90, "difficulty": 5, "control": 60 }
+    stats = Column(JSON, nullable=True)
+
     base_power = Column(Float, default=50.0)
     difficulty = Column(Integer, default=3)
     role_specific = Column(Boolean, default=False)

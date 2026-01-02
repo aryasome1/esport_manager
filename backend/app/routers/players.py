@@ -17,7 +17,7 @@ from ..models.models import Player, Hero, HeroStat, Team, User
 # [NOTE] DivisionType import is kept for schema usage but not for filtering logic to avoid AttributeErrors
 from ..models.division_models import DivisionType
 from ..schemas.schemas import (
-    PlayerCreate, PlayerUpdate, Player as PlayerSchema,
+    PlayerCreate, PlayerUpdate, Player as PlayerSchema, Hero as HeroSchema,
     PlayerWithHeroStats, HeroStatCreate, HeroStatUpdate, HeroStatResponse,
     PaginationParams, PaginatedResponse, BaseResponse, ErrorResponse
 )
@@ -171,7 +171,7 @@ async def get_player(
             "id": player.id,
             "name": player.name,
             "email": player.email,
-            "username": player.username,
+            # "username": player.username,  <-- REMOVED because attribute doesn't exist
             "ovr": player.ovr,
             "focus": player.focus,
             "mental": player.mental,
@@ -186,12 +186,14 @@ async def get_player(
             "moba_teamfight_presence": player.moba_teamfight_presence,
             "tactical_aim": player.tactical_aim,
             "tactical_gamesense": player.tactical_gamesense,
-            "is_active": player.is_active,
+            # "is_active": player.is_active, # REMOVED: Attribute does not exist
             "created_at": player.created_at,
             "updated_at": player.updated_at,
             # Relations
             "hero_stats": hero_stats,
-            "team": player.team
+            "team": player.team,
+            # [FIX] Explicitly convert ORM object to Pydantic model to prevent Serialization Error
+            "assigned_hero": HeroSchema.model_validate(player.assigned_hero) if player.assigned_hero else None
         }
         
         return PlayerWithHeroStats(**response_data)
@@ -200,6 +202,9 @@ async def get_player(
         raise
     except Exception as e:
         logger.error(f"Error fetching player {player_id}: {e}")
+        # Print stack trace for easier debugging
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch player details"

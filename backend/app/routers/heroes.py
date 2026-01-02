@@ -18,7 +18,7 @@ from ..schemas.schemas import (
     BaseResponse, ErrorResponse
 )
 
-router = APIRouter(prefix="/heroes", tags=["Heroes"])
+router = APIRouter(tags=["Heroes"])
 logger = logging.getLogger(__name__)
 
 def get_hero_or_404(db: Session, hero_id: int) -> Hero:
@@ -36,6 +36,8 @@ async def get_heroes(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     role: Optional[RoleType] = Query(None),
+    hero_class: Optional[str] = Query(None),
+    lane: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     min_power: Optional[float] = Query(None, ge=0.0, le=100.0),
     max_difficulty: Optional[int] = Query(None, ge=1, le=5),
@@ -58,7 +60,9 @@ async def get_heroes(
         if search:
             search_filter = or_(
                 Hero.name.ilike(f"%{search}%"),
-                Hero.description.ilike(f"%{search}%")
+                Hero.description.ilike(f"%{search}%"),
+                Hero.story.ilike(f"%{search}%"),
+                Hero.specialty.ilike(f"%{search}%")
             )
             query = query.filter(search_filter)
         
@@ -70,6 +74,12 @@ async def get_heroes(
         
         if role_specific is not None:
             query = query.filter(Hero.role_specific == role_specific)
+
+        if hero_class:
+            query = query.filter(Hero.hero_class.ilike(f"%{hero_class}%"))
+        
+        if lane:
+            query = query.filter(Hero.lane.ilike(f"%{lane}%"))
         
         # Get total count
         total = query.count()
@@ -81,7 +91,7 @@ async def get_heroes(
         pages = (total + limit - 1) // limit
         
         return PaginatedResponse(
-            items=heroes,
+            items=[HeroSchema.model_validate(h) for h in heroes],
             total=total,
             page=(skip // limit) + 1,
             size=limit,
@@ -153,7 +163,18 @@ async def create_hero(
             base_power=hero_data.base_power,
             difficulty=hero_data.difficulty,
             role_specific=hero_data.role_specific,
-            preferred_lanes=[lane.value for lane in hero_data.preferred_lanes]
+            preferred_lanes=[lane.value for lane in hero_data.preferred_lanes],
+            # [NEW] Fields
+            image_url=hero_data.image_url,
+            icon_url=hero_data.icon_url,
+            hero_class=hero_data.hero_class,
+            specialty=hero_data.specialty,
+            lane=hero_data.lane,
+            release_year=hero_data.release_year,
+            story=hero_data.story,
+            resource_type=hero_data.resource_type,
+            damage_type=hero_data.damage_type,
+            stats=hero_data.stats
         )
         
         db.add(db_hero)
@@ -386,7 +407,7 @@ async def get_most_popular_heroes(
                 hero_data["avg_power"] = sum(data["hero_powers"]) / len(data["hero_powers"])
                 popular_heroes.append(hero)
         
-        return popular_heroes
+        return [HeroSchema.model_validate(h) for h in popular_heroes]
         
     except Exception as e:
         logger.error(f"Error fetching popular heroes: {e}")
@@ -420,7 +441,7 @@ async def get_heroes_by_role(
                 # Include non-role-specific heroes
                 suitable_heroes.append(hero)
         
-        return suitable_heroes
+        return [HeroSchema.model_validate(h) for h in suitable_heroes]
         
     except Exception as e:
         logger.error(f"Error fetching heroes by role {role_name}: {e}")

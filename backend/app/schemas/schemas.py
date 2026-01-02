@@ -144,6 +144,9 @@ class Player(PlayerBase, TimestampBase):
     training_hours: int = 0
     division_preference: Optional[Union[DivisionType, str]] = "moba"
     
+    assigned_hero_id: Optional[int] = None
+    assigned_hero: Optional["Hero"] = None
+    
     moba_laning_skill: Optional[float] = 50.0
     moba_teamfight_presence: Optional[float] = 50.0
     tactical_aim: Optional[float] = 50.0
@@ -162,9 +165,19 @@ class HeroBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = ""
     base_power: float = Field(default=50.0, ge=0.0, le=100.0)
-    difficulty: int = Field(default=3, ge=1, le=5)
+    difficulty: int = Field(default=3, ge=1, le=10)
     role_specific: bool = False
     image_url: Optional[str] = None
+    icon_url: Optional[str] = None
+    
+    hero_class: Optional[str] = None
+    specialty: Optional[str] = None
+    lane: Optional[str] = None
+    release_year: Optional[int] = 2024
+    story: Optional[str] = None
+    resource_type: Optional[str] = "Mana"
+    damage_type: Optional[str] = "Physical"
+    stats: Optional[Dict[str, int]] = None
 
 class HeroCreate(HeroBase):
     preferred_lanes: List[Union[RoleType, str]] = []
@@ -176,6 +189,11 @@ class HeroUpdate(BaseModel):
     difficulty: Optional[int] = Field(None, ge=1, le=5)
     preferred_lanes: Optional[List[Union[RoleType, str]]] = None
     image_url: Optional[str] = None
+    icon_url: Optional[str] = None
+    hero_class: Optional[str] = None
+    specialty: Optional[str] = None
+    lane: Optional[str] = None
+    stats: Optional[Dict[str, int]] = None
 
 class Hero(HeroBase, TimestampBase):
     id: int
