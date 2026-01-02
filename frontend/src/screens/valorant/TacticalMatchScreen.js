@@ -52,12 +52,12 @@ export default function TacticalMatchScreen({ navigation }) {
     } else if (activeFilter === 'COMPLETED') {
       result = matches.filter(m => m.status === 'completed');
     }
-    
+
     // Sort
     result.sort((a, b) => {
-        const dateA = new Date(a.scheduled_at);
-        const dateB = new Date(b.scheduled_at);
-        return activeFilter === 'COMPLETED' ? dateB - dateA : dateA - dateB;
+      const dateA = new Date(a.scheduled_at);
+      const dateB = new Date(b.scheduled_at);
+      return activeFilter === 'COMPLETED' ? dateB - dateA : dateA - dateB;
     });
 
     setFilteredMatches(result);
@@ -70,77 +70,82 @@ export default function TacticalMatchScreen({ navigation }) {
     const timeString = matchDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
         onPress={() => {
-            if (item.status === 'scheduled') {
-                navigation.navigate('ValorantMatchSim', { matchId: item.id });
-            }
+          if (item.status === 'scheduled') {
+            // Navigate to Agent Pick Screen first
+            navigation.navigate('AgentPickScreen', {
+              matchId: item.id,
+              matchData: item,
+              isAIMatch: !!item.ai_opponent_id
+            });
+          }
         }}
       >
         {/* Left Accent Bar */}
         <View style={[
-            styles.accentBar, 
-            { backgroundColor: isCompleted ? '#10b981' : '#ff4655' }
+          styles.accentBar,
+          { backgroundColor: isCompleted ? '#10b981' : '#ff4655' }
         ]} />
 
         <View style={styles.cardContent}>
-            {/* Header Info */}
-            <View style={styles.matchHeader}>
-                <View style={styles.badgeContainer}>
-                    <Text style={[
-                        styles.statusText, 
-                        { color: isCompleted ? '#10b981' : '#ff4655' }
-                    ]}>
-                        {isCompleted ? 'OPERATION COMPLETE' : 'DEPLOYMENT SCHEDULED'}
-                    </Text>
-                </View>
-                <View style={styles.dateTime}>
-                    <Ionicons name="time-outline" size={12} color="#94a3b8" />
-                    <Text style={styles.dateText}>{dateString} // {timeString}</Text>
-                </View>
+          {/* Header Info */}
+          <View style={styles.matchHeader}>
+            <View style={styles.badgeContainer}>
+              <Text style={[
+                styles.statusText,
+                { color: isCompleted ? '#10b981' : '#ff4655' }
+              ]}>
+                {isCompleted ? 'OPERATION COMPLETE' : 'DEPLOYMENT SCHEDULED'}
+              </Text>
+            </View>
+            <View style={styles.dateTime}>
+              <Ionicons name="time-outline" size={12} color="#94a3b8" />
+              <Text style={styles.dateText}>{dateString} // {timeString}</Text>
+            </View>
+          </View>
+
+          {/* VS Section */}
+          <View style={styles.matchBody}>
+            <View style={styles.teamBox}>
+              <Text style={styles.teamName} numberOfLines={1}>{item.team1?.name.toUpperCase()}</Text>
+              <Text style={styles.teamTag}>{item.team1?.name_short || 'T1'}</Text>
             </View>
 
-            {/* VS Section */}
-            <View style={styles.matchBody}>
-                <View style={styles.teamBox}>
-                    <Text style={styles.teamName} numberOfLines={1}>{item.team1?.name.toUpperCase()}</Text>
-                    <Text style={styles.teamTag}>{item.team1?.name_short || 'T1'}</Text>
+            <View style={styles.vsBox}>
+              {isCompleted ? (
+                <View style={styles.scoreBox}>
+                  <Text style={[styles.score, item.winner_team_id === item.team1_id && styles.winnerScore]}>
+                    {item.team1_score}
+                  </Text>
+                  <Text style={styles.divider}>:</Text>
+                  <Text style={[styles.score, item.winner_team_id === item.team2_id && styles.winnerScore]}>
+                    {item.team2_score}
+                  </Text>
                 </View>
-
-                <View style={styles.vsBox}>
-                    {isCompleted ? (
-                        <View style={styles.scoreBox}>
-                            <Text style={[styles.score, item.winner_team_id === item.team1_id && styles.winnerScore]}>
-                                {item.team1_score}
-                            </Text>
-                            <Text style={styles.divider}>:</Text>
-                            <Text style={[styles.score, item.winner_team_id === item.team2_id && styles.winnerScore]}>
-                                {item.team2_score}
-                            </Text>
-                        </View>
-                    ) : (
-                        <Text style={styles.vsText}>VS</Text>
-                    )}
-                </View>
-
-                <View style={[styles.teamBox, { alignItems: 'flex-end' }]}>
-                    <Text style={styles.teamName} numberOfLines={1}>{item.team2?.name.toUpperCase()}</Text>
-                    <Text style={styles.teamTag}>{item.team2?.name_short || 'T2'}</Text>
-                </View>
+              ) : (
+                <Text style={styles.vsText}>VS</Text>
+              )}
             </View>
-            
-            {/* Footer Action */}
-            {!isCompleted && (
-                <View style={styles.footer}>
-                     <Text style={styles.mapText}>MAP: {item.game_mode || 'TBD'}</Text>
-                     <View style={styles.enterBtn}>
-                        <Text style={styles.enterText}>INITIATE</Text>
-                        <MaterialCommunityIcons name="chevron-double-right" size={16} color="#0f172a" />
-                     </View>
-                </View>
-            )}
+
+            <View style={[styles.teamBox, { alignItems: 'flex-end' }]}>
+              <Text style={styles.teamName} numberOfLines={1}>{item.team2?.name.toUpperCase()}</Text>
+              <Text style={styles.teamTag}>{item.team2?.name_short || 'T2'}</Text>
+            </View>
+          </View>
+
+          {/* Footer Action */}
+          {!isCompleted && (
+            <View style={styles.footer}>
+              <Text style={styles.mapText}>MAP: {item.game_mode || 'TBD'}</Text>
+              <View style={styles.enterBtn}>
+                <Text style={styles.enterText}>INITIATE</Text>
+                <MaterialCommunityIcons name="chevron-double-right" size={16} color="#0f172a" />
+              </View>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -150,8 +155,8 @@ export default function TacticalMatchScreen({ navigation }) {
     <View style={styles.container}>
       {/* Title Header */}
       <View style={styles.screenHeader}>
-         <Text style={styles.screenTitle}>OPERATIONAL TIMELINE</Text>
-         <View style={styles.headerLine} />
+        <Text style={styles.screenTitle}>OPERATIONAL TIMELINE</Text>
+        <View style={styles.headerLine} />
       </View>
 
       {/* Filters */}
@@ -163,7 +168,7 @@ export default function TacticalMatchScreen({ navigation }) {
             onPress={() => setActiveFilter(tab)}
           >
             <Text style={[styles.filterText, activeFilter === tab && styles.activeFilterText]}>
-                {tab}
+              {tab}
             </Text>
           </TouchableOpacity>
         ))}
@@ -183,8 +188,8 @@ export default function TacticalMatchScreen({ navigation }) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-                <FontAwesome5 name="satellite-dish" size={40} color="#334155" />
-                <Text style={styles.emptyText}>NO OPERATIONS FOUND</Text>
+              <FontAwesome5 name="satellite-dish" size={40} color="#334155" />
+              <Text style={styles.emptyText}>NO OPERATIONS FOUND</Text>
             </View>
           }
         />
@@ -215,7 +220,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#334155',
     width: '100%',
   },
-  
+
   // Filters
   filterContainer: {
     flexDirection: 'row',
@@ -266,7 +271,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
   },
-  
+
   // Match Info
   matchHeader: {
     flexDirection: 'row',
@@ -308,7 +313,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
-  
+
   vsBox: {
     paddingHorizontal: 10,
   },

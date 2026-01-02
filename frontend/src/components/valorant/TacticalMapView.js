@@ -103,7 +103,7 @@ export default function TacticalMapView({
     const isDefending = team === 'team1'; // Team1 defending
     const agentColor = isDefending ? theme.colors.accent.blue : theme.colors.accent.red;
     const agentRole = agent?.role || 'Unknown';
-    
+
     // Determine agent icon based on role
     const getAgentIcon = (role) => {
       const icons = {
@@ -223,7 +223,7 @@ export default function TacticalMapView({
         ]}>
           {getZoneLabel(zoneName)}
         </Text>
-        
+
         {/* Zone activity indicator */}
         <View style={[
           styles.zoneActivity,
@@ -335,7 +335,7 @@ export default function TacticalMapView({
           <Text style={styles.roundStatsTitle}>
             Round {roundStats.roundNumber} Complete
           </Text>
-          
+
           <View style={styles.roundStatsContent}>
             <View style={styles.statRow}>
               <Text style={styles.statLabel}>Winner:</Text>
@@ -346,14 +346,14 @@ export default function TacticalMapView({
                 {roundStats.winner === 'team1' ? 'Defenders' : 'Attackers'}
               </Text>
             </View>
-            
+
             <View style={styles.statRow}>
               <Text style={styles.statLabel}>Kills:</Text>
               <Text style={styles.statValue}>
                 {roundStats.kills?.team1 || 0} - {roundStats.kills?.team2 || 0}
               </Text>
             </View>
-            
+
             {roundStats.economy && (
               <View style={styles.statRow}>
                 <Text style={styles.statLabel}>Economy:</Text>
@@ -380,20 +380,24 @@ export default function TacticalMapView({
         ]}
         {...panResponder.panHandlers}
       >
-        {/* Map Image/Background */}
-        <Image
-          source={map?.image_url ? { uri: map.image_url } : { uri: 'https://via.placeholder.com/800x600/1a1a2e/ffffff?text=Valorant+Map' }}
-          style={styles.mapImage}
-          resizeMode="cover"
-        />
-        
+        {/* Map Image/Background - Using local fallback */}
+        {map?.image_url ? (
+          <Image
+            source={{ uri: map.image_url }}
+            style={styles.mapImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.mapImage, { backgroundColor: '#1a1a2e' }]} />
+        )}
+
         {/* Map Overlay */}
         <View style={styles.mapOverlay} />
       </Animated.View>
 
       {/* Map Zones */}
       <View style={styles.zonesContainer}>
-        {Object.entries(MAP_ZONES).map(([zoneName, zone]) => 
+        {Object.entries(MAP_ZONES).map(([zoneName, zone]) =>
           renderMapZone(zoneName, zone)
         )}
       </View>
@@ -406,7 +410,7 @@ export default function TacticalMapView({
       {/* Agents */}
       <View style={styles.agentsContainer}>
         {/* Team 1 Agents (Defenders) */}
-        {agentPositions.team1?.map((position, index) => 
+        {agentPositions.team1?.map((position, index) =>
           renderAgent(
             agents.team1?.[index],
             position,
@@ -414,9 +418,9 @@ export default function TacticalMapView({
             index
           )
         )}
-        
+
         {/* Team 2 Agents (Attackers) */}
-        {agentPositions.team2?.map((position, index) => 
+        {agentPositions.team2?.map((position, index) =>
           renderAgent(
             agents.team2?.[index],
             position,

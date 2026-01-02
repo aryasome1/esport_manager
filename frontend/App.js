@@ -50,6 +50,7 @@ import AgentListScreen from './src/screens/valorant/AgentListScreen';
 import AgentDetailScreen from './src/screens/valorant/AgentDetailScreen';
 import MapTacticScreen from './src/screens/valorant/MapTacticScreen';
 import TacticalMatchScreen from './src/screens/valorant/TacticalMatchScreen'; // <--- Tambah Import
+import AgentPickScreen from './src/screens/valorant/AgentPickScreen'; // <--- Agent Pick Screen
 
 // Setup Screen
 import TeamSetupScreen from './src/screens/setup/TeamSetupScreen';
@@ -96,10 +97,10 @@ function MOBATabs() {
           paddingTop: 5,
           height: 60,
         },
-        headerStyle: { 
-            backgroundColor: theme.colors.primary.main, // Header Biru
-            elevation: 0,
-            shadowOpacity: 0
+        headerStyle: {
+          backgroundColor: theme.colors.primary.main, // Header Biru
+          elevation: 0,
+          shadowOpacity: 0
         },
         headerTintColor: theme.colors.primary.contrast,
         headerTitleStyle: { fontWeight: 'bold', fontSize: 18 },
@@ -107,21 +108,21 @@ function MOBATabs() {
       })}
     >
       {/* TAB 1: HOME (Dashboard) */}
-      <Tab.Screen 
-        name="MobaHome" 
-        component={MobaHomeScreen} 
-        options={{ 
-          title: 'Team Headquarters', 
+      <Tab.Screen
+        name="MobaHome"
+        component={MobaHomeScreen}
+        options={{
+          title: 'Team Headquarters',
           tabBarLabel: 'Home',
-          tabBarIcon: ({color}) => <MaterialCommunityIcons name="home-variant" size={24} color={color} />
-        }} 
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="home-variant" size={24} color={color} />
+        }}
       />
 
       {/* TAB 2: ROSTER (Team) */}
-      <Tab.Screen 
-        name="MobaRoster" 
-        component={MobaRosterScreen} 
-        options={{ tabBarLabel: 'Roster' }} 
+      <Tab.Screen
+        name="MobaRoster"
+        component={MobaRosterScreen}
+        options={{ tabBarLabel: 'Roster' }}
       />
 
       {/* TAB LAINNYA */}
@@ -136,23 +137,23 @@ function MOBATabs() {
 function MOBAStackContainer() {
   return (
     <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.colors.primary.main }, headerTintColor: theme.colors.primary.contrast }}>
-      <Stack.Screen 
-        name="MOBATabs" 
-        component={MOBATabs} 
+      <Stack.Screen
+        name="MOBATabs"
+        component={MOBATabs}
         options={{ headerShown: false }} // <--- MATIKAN DOUBLE HEADER
       />
       <Stack.Screen name="MobaDraft" component={MobaDraftScreen} options={{ headerShown: false }} />
       <Stack.Screen name="MobaMatch" component={MobaMatchSim} options={{ headerShown: false }} />
       <Stack.Screen name="PlayerProfile" component={PlayerProfileScreen} options={{ headerShown: false }} />
-      <Stack.Screen 
-        name="MobaHeroes" 
-        component={MobaHeroesScreen} 
-        options={{ title: 'Hero Database', headerShown: true }} 
+      <Stack.Screen
+        name="MobaHeroes"
+        component={MobaHeroesScreen}
+        options={{ title: 'Hero Database', headerShown: true }}
       />
-      <Stack.Screen 
-        name="HeroDetail" 
-        component={HeroDetailScreen} 
-        options={{ headerShown: false }} 
+      <Stack.Screen
+        name="HeroDetail"
+        component={HeroDetailScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
@@ -169,7 +170,7 @@ function TacticalTabs() {
         // Warna Aksen tetap Merah/Ungu biar beda Divisi, tapi struktur layout SAMA
         tabBarActiveTintColor: '#ff4655', // Valorant Red
         tabBarInactiveTintColor: theme.colors.text.secondary,
-        
+
         // [STYLING DISAMAKAN DENGAN MOBA]
         tabBarStyle: {
           backgroundColor: '#1a1a2e', // Samakan background
@@ -179,20 +180,20 @@ function TacticalTabs() {
           paddingTop: 5,
           height: 60, // Samakan tinggi
         },
-        headerStyle: { 
+        headerStyle: {
           backgroundColor: '#ff4655', // Header merah (Tactical), tapi...
           elevation: 0, // Hilangkan shadow biar flat kayak MOBA
           shadowOpacity: 0,
         },
         headerTintColor: theme.colors.primary.contrast,
-        headerTitleStyle: { 
+        headerTitleStyle: {
           fontWeight: 'bold',
           fontSize: 18, // Samakan ukuran font
         },
-        tabBarLabelStyle: { 
-          fontSize: 12, 
-          fontWeight: '600', 
-          marginBottom: 2 
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+          marginBottom: 2
         }
       })}
     >
@@ -200,16 +201,16 @@ function TacticalTabs() {
         1. Hapus 'headerShown: false' (Biar punya header kayak screen lain)
         2. Hapus 'display: none' (Biar navbar bawah muncul)
       */}
-      <Tab.Screen 
-        name="FpsHome" 
-        component={FpsHomeScreen} 
-        options={{ 
+      <Tab.Screen
+        name="FpsHome"
+        component={FpsHomeScreen}
+        options={{
           title: 'Command Center', // Judul Header
           tabBarLabel: 'Dashboard',
-          tabBarIcon: ({color}) => <MaterialCommunityIcons name="view-dashboard" size={24} color={color} /> 
-        }} 
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="view-dashboard" size={24} color={color} />
+        }}
       />
-      
+
       <Tab.Screen name="Team" component={TacticalTeamScreen} options={{ tabBarLabel: 'Roster' }} />
       <Tab.Screen name="AgentList" component={AgentListScreen} options={{ tabBarLabel: 'Agents' }} />
       <Tab.Screen name="MapPool" component={MapPoolScreen} options={{ tabBarLabel: 'Maps' }} />
@@ -221,21 +222,22 @@ function TacticalTabs() {
 // --- TACTICAL STACK ---
 function TacticalStackContainer({ onExit }) {
   return (
-    <Stack.Navigator screenOptions={{ 
-      headerStyle: { backgroundColor: theme.colors.accent.purple }, 
-      headerTintColor: theme.colors.primary.contrast 
+    <Stack.Navigator screenOptions={{
+      headerStyle: { backgroundColor: theme.colors.accent.purple },
+      headerTintColor: theme.colors.primary.contrast
     }}>
-      
+
       {/* [UBAH BAGIAN INI] */}
-      <Stack.Screen 
-        name="TacticalTabs" 
-        component={TacticalTabs} 
-        options={{ 
+      <Stack.Screen
+        name="TacticalTabs"
+        component={TacticalTabs}
+        options={{
           headerShown: false // <--- UBAH JADI FALSE (Ini kuncinya)
-        }} 
+        }}
       />
-      
+
       {/* Screen lain biarkan false seperti sebelumnya */}
+      <Stack.Screen name="AgentPickScreen" component={AgentPickScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ValorantDraft" component={ValorantDraftScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ValorantMatchSim" component={ValorantMatchSim} options={{ headerShown: false }} />
       <Stack.Screen name="PlayerProfile" component={PlayerProfileScreen} options={{ headerShown: false }} />
@@ -255,74 +257,74 @@ function MainHubNavigator() {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      
+
       {!hasTeam ? (
         <Stack.Screen name="TeamSetup" component={TeamSetupScreen} />
       ) : (
         <Stack.Screen name="MainHub" component={MainHubScreen} />
       )}
-      <Stack.Screen name="Profile" component={ProfileScreen} /> 
+      <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="DivisionSelect">
         {(props) => (
-          <DivisionSelectionScreen 
-            {...props} 
+          <DivisionSelectionScreen
+            {...props}
             onDivisionSelect={(div) => {
-                selectDivision(div);
-                const target = props.route.params?.nextTarget;
-                
-                // --- LOGIKA MOBA ---
-                if (div === 'moba') {
-                    if (target === 'Match') {
-                        // [FIX] Arahkan ke Tab Schedule (Matches), BUKAN langsung simulasi
-                        props.navigation.navigate('MobaStack', { 
-                            screen: 'MOBATabs', 
-                            params: { screen: 'Matches' } 
-                        });
-                    }
-                    else if (target === 'Team') {
-                        props.navigation.navigate('MobaStack', { 
-                            screen: 'MOBATabs', 
-                            params: { screen: 'MobaRoster' } 
-                        });
-                    }
-                    else if (target === 'Training') {
-                        props.navigation.navigate('MobaStack', { 
-                            screen: 'MOBATabs', 
-                            params: { screen: 'Heroes' } 
-                        });
-                    }
-                    else {
-                        // Default ke Dashboard Home
-                        props.navigation.navigate('MobaStack', { 
-                            screen: 'MOBATabs', 
-                            params: { screen: 'MobaHome' } 
-                        });
-                    }
-                
-                // --- LOGIKA TACTICAL (FPS) ---
-                } else if (div === 'tactical' || div === 'valorant') { 
-                    if (target === 'Match') {
-                        // [FIX] Arahkan ke Tab Schedule (TacticalMatches)
-                        props.navigation.navigate('TacticalStack', { 
-                            screen: 'TacticalTabs', 
-                            params: { screen: 'TacticalMatches' } 
-                        });
-                    }
-                    else if (target === 'Team') {
-                        props.navigation.navigate('TacticalStack', { 
-                            screen: 'TacticalTabs', 
-                            params: { screen: 'Team' } 
-                        });
-                    }
-                    else {
-                        // Default ke Dashboard Home
-                        props.navigation.navigate('TacticalStack', { 
-                            screen: 'TacticalTabs', 
-                            params: { screen: 'FpsHome' } 
-                        });
-                    }
+              selectDivision(div);
+              const target = props.route.params?.nextTarget;
+
+              // --- LOGIKA MOBA ---
+              if (div === 'moba') {
+                if (target === 'Match') {
+                  // [FIX] Arahkan ke Tab Schedule (Matches), BUKAN langsung simulasi
+                  props.navigation.navigate('MobaStack', {
+                    screen: 'MOBATabs',
+                    params: { screen: 'Matches' }
+                  });
                 }
-            }} 
+                else if (target === 'Team') {
+                  props.navigation.navigate('MobaStack', {
+                    screen: 'MOBATabs',
+                    params: { screen: 'MobaRoster' }
+                  });
+                }
+                else if (target === 'Training') {
+                  props.navigation.navigate('MobaStack', {
+                    screen: 'MOBATabs',
+                    params: { screen: 'Heroes' }
+                  });
+                }
+                else {
+                  // Default ke Dashboard Home
+                  props.navigation.navigate('MobaStack', {
+                    screen: 'MOBATabs',
+                    params: { screen: 'MobaHome' }
+                  });
+                }
+
+                // --- LOGIKA TACTICAL (FPS) ---
+              } else if (div === 'tactical' || div === 'valorant') {
+                if (target === 'Match') {
+                  // [FIX] Arahkan ke Tab Schedule (TacticalMatches)
+                  props.navigation.navigate('TacticalStack', {
+                    screen: 'TacticalTabs',
+                    params: { screen: 'TacticalMatches' }
+                  });
+                }
+                else if (target === 'Team') {
+                  props.navigation.navigate('TacticalStack', {
+                    screen: 'TacticalTabs',
+                    params: { screen: 'Team' }
+                  });
+                }
+                else {
+                  // Default ke Dashboard Home
+                  props.navigation.navigate('TacticalStack', {
+                    screen: 'TacticalTabs',
+                    params: { screen: 'FpsHome' }
+                  });
+                }
+              }
+            }}
           />
         )}
       </Stack.Screen>
