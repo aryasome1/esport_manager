@@ -23,7 +23,7 @@ from ..schemas.schemas import (
     ValorantAgent, BaseResponse, Player as PlayerSchema
 )
 
-router = APIRouter(prefix="/valorant", tags=["Valorant"])
+router = APIRouter(tags=["Valorant"])
 logger = logging.getLogger(__name__)
 
 @router.get("/agents")
@@ -201,3 +201,201 @@ def generate_tactical_recommendations(agent_stats: List, map_stats: List) -> Lis
         recommendations.append(f"Focus improvement on {', '.join([stat.map_name for stat in low_win_rate_maps[:2]])}")
     
     return recommendations
+
+# [NEW] Match Detail Endpoint for Simulation
+@router.get("/matches/{match_id}")
+async def get_valorant_match_details(
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get detailed match data for Valorant simulation, including agents and map.
+    If specific match data (MatchMap) is missing, it attempts to generate/infer it.
+    """
+    try:
+        from sqlalchemy.orm import joinedload
+        
+        # 1. Fetch Basic Match with eager loaded teams and players
+        match = db.query(Match).options(
+            joinedload(Match.team1).joinedload(Team.players),
+            joinedload(Match.team2).joinedload(Team.players)
+        ).filter(Match.id == match_id).first()
+        
+        if not match:
+            raise HTTPException(404, "Match not found")
+            
+        # 2. Fetch MatchMap (Tactical Data)
+        # Assuming 1 map per match for now for simpler simulation
+        from ..models.division_models import MatchMap, Map
+        match_map = db.query(MatchMap).filter(MatchMap.match_id == match_id).first()
+        
+        # If no MatchMap exists, create a default one (e.g. Ascent)
+        if not match_map:
+            # Get a random map or default to Ascent
+            default_map = db.query(Map).filter(Map.name == "Ascent").first()
+            if not default_map:
+                # Create default map if even that is missing (seeding issue)
+                default_map = Map(name="Ascent", map_type="tactical", image_url="ascent.jpg")
+                db.add(default_map)
+                db.commit()
+                
+            match_map = MatchMap(
+                match_id=match_id,
+                map_id=default_map.id,
+                map_number=1,
+                team1_agents="", # Empty initially
+                team2_agents=""
+            )
+            db.add(match_map)
+            db.commit()
+            db.refresh(match_map)
+
+        # 3. Resolve Agents for Teams
+        # We need to return a dict of agents: { "id_or_name": { ...agent_data... } }
+        
+        resolved_agents = {}
+        
+        # Helper to process team players into agents
+        def process_team_agents(team, team_id_val, stored_agents_str):
+            team_agents = []
+            
+            # If we have stored agents in MatchMap (e.g. JSON string), parse them
+            # For now, we'll focus on inferring from Players if stored is empty
+            
+            if team and team.players:
+                # First try: Filter players by division_preference = 'tactical'
+                tactical_players = [
+                    p for p in team.players 
+                    if p.division_preference == 'tactical'
+                ]
+                
+                # Fallback: If not enough tactical-specific players, include all
+                if len(tactical_players) < 5:
+                    tactical_players = list(team.players)
+                
+                # Limit to 5 players (standard Valorant team size)
+                tactical_players = tactical_players[:5]
+                
+                for req_player in tactical_players:
+                    # Determine Agent
+                    agent_name = "Jett" # Default
+                    agent_role = "Duelist"
+                    
+                    # 1. Check Agent Stats (Priority for Valorant)
+                    if req_player.agent_stats:
+                        # Sort by mastery
+                        best_stat = sorted(req_player.agent_stats, key=lambda x: x.agent_mastery, reverse=True)[0]
+                        if best_stat.agent:
+                            agent_name = best_stat.agent.name
+                            agent_role = best_stat.agent.role
+                    # 2. Fallback to assigned hero (for cross-division players)         
+                    elif req_player.assigned_hero:
+                         agent_name = req_player.assigned_hero.name
+                         if req_player.assigned_hero.hero_class:
+                             agent_role = req_player.assigned_hero.hero_class
+                    
+                    # Ensure unique agent - check if already picked
+                    used_agents = [a["name"] for a in team_agents]
+                    if agent_name in used_agents:
+                        # Pick alternative agent based on role
+                        role_agents = {
+                            "Duelist": ["Jett", "Reyna", "Raze", "Phoenix", "Yoru", "Neon", "Iso"],
+                            "Controller": ["Omen", "Brimstone", "Viper", "Astra", "Harbor", "Clove"],
+                            "Initiator": ["Sova", "Breach", "Skye", "KAY/O", "Fade", "Gekko"],
+                            "Sentinel": ["Sage", "Cypher", "Killjoy", "Chamber", "Deadlock", "Vyse"],
+                        }
+                        alternatives = role_agents.get(agent_role, ["Jett", "Reyna", "Raze", "Phoenix", "Yoru"])
+                        for alt in alternatives:
+                            if alt not in used_agents:
+                                agent_name = alt
+                                break
+                             
+                    # Construct Agent Object
+                    agent_obj = {
+                        "id": f"{team_id_val}_{req_player.id}", # Unique ID for sim
+                        "player_id": req_player.id,
+                        "player_name": req_player.name,  # Include player name
+                        "name": agent_name,
+                        "role": agent_role,
+                        "teamId": team_id_val,
+                        "hp": 100,
+                        "isDead": False,
+                        # Initial positions will be set by Sim, but we can provide defaults
+                        "x": 0, 
+                        "y": 0
+                    }
+                    team_agents.append(agent_obj)
+                    
+            # Fallback if no players (e.g. AI or empty team)
+            if not team_agents or len(team_agents) < 5:
+                 # Generate dummy agents to fill remaining slots - all unique
+                 roles = ["Duelist", "Controller", "Initiator", "Sentinel", "Sentinel"]
+                 default_agents = ["Jett", "Omen", "Sova", "Sage", "Cypher"]
+                 used_names = [a["name"] for a in team_agents]
+                 
+                 existing_count = len(team_agents)
+                 for i in range(existing_count, 5):
+                     # Find unused agent
+                     agent_name = default_agents[i]
+                     if agent_name in used_names:
+                         # Find alternative
+                         all_agents = ["Jett", "Omen", "Sova", "Sage", "Cypher", "Reyna", "Brimstone", "Breach", "Killjoy", "Raze"]
+                         for alt in all_agents:
+                             if alt not in used_names:
+                                 agent_name = alt
+                                 used_names.append(alt)
+                                 break
+                     else:
+                         used_names.append(agent_name)
+                         
+                     team_agents.append({
+                        "id": f"{team_id_val}_ai_{i}",
+                        "player_name": f"Bot {i+1}",
+                        "name": agent_name,
+                        "role": roles[i],
+                        "teamId": team_id_val,
+                        "hp": 100,
+                        "isDead": False,
+                        "x": 0, "y": 0
+                     })
+                     
+            return team_agents
+
+        # Process Team 1
+        t1_agents = process_team_agents(match.team1, match.team1_id, match_map.team1_agents)
+        for ag in t1_agents:
+            resolved_agents[ag["id"]] = ag
+            
+        # Process Team 2
+        t2_agents = process_team_agents(match.team2, match.team2_id, match_map.team2_agents)
+        for ag in t2_agents:
+            resolved_agents[ag["id"]] = ag
+
+        # 4. Construct Response
+        response = {
+            "id": match.id,
+            "match_id": match.id, # Redundant but safe
+            "team1_id": match.team1_id,
+            "team2_id": match.team2_id,
+            "team1": { "id": match.team1.id, "name": match.team1.name } if match.team1 else {},
+            "team2": { "id": match.team2.id, "name": match.team2.name } if match.team2 else {},
+            "map": {
+                "id": match_map.map_id,
+                "name": match_map.map.name if match_map.map else "Ascent"
+            },
+            "agents": resolved_agents,
+            "status": match.status,
+            "score": {
+                "team1": match.team1_score,
+                "team2": match.team2_score
+            }
+        }
+        
+        return response
+
+    except Exception as e:
+        logger.error(f"Error fetching match details: {e}")
+        # import traceback
+        # traceback.print_exc()
+        raise HTTPException(500, f"Failed to fetch match details: {str(e)}")

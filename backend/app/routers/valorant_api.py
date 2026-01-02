@@ -11,7 +11,7 @@ from app.database import get_db
 from app.services.valorant_service import ValorantMatchService
 from app.services.valorant_api_service import ValorantAgent
 
-router = APIRouter(prefix="/api/valorant", tags=["valorant-api"])
+router = APIRouter(tags=["valorant-api"])
 
 @router.get("/agents", response_model=List[Dict[str, Any]])
 async def get_all_agents(db: Session = Depends(get_db)):
