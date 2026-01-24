@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Dimensions,
   Alert,
-  ScrollView,
   ImageBackground,
   Image,
 } from 'react-native';
@@ -19,7 +18,6 @@ import * as Animatable from 'react-native-animatable';
 
 // Services
 import { ValorantService } from '../../services/ValorantService';
-import { AIOpponentService } from '../../services/AIOpponentService';
 
 // Theme
 import { theme } from '../../theme/theme';
@@ -28,10 +26,98 @@ const { width, height } = Dimensions.get('window');
 
 // Simulation Config
 const SIM_TICK_RATE = 100;
-const AGENT_SPEED = 3;
-const COMBAT_RANGE = 40;
-const BASE_ACCURACY = 0.15;
-const MAX_ROUNDS = 13;
+const AGENT_SPEED = 2.5; // Increased base speed
+const COMBAT_RANGE = 45;
+const MAX_ROUNDS_REGULATION = 13;
+
+// Map dimensions for positioning
+const MAP_WIDTH = 360;
+const MAP_HEIGHT = 280;
+
+// Defines tactical points on the map (HORIZONTAL: Defenders LEFT, Attackers RIGHT)
+const MAP_POINTS = {
+  // Spawns - Horizontal layout
+  defenderSpawn: { x: 40, y: 140 },   // LEFT side
+  attackerSpawn: { x: 320, y: 140 },  // RIGHT side
+
+  // Sites (Defenders protect these on LEFT)
+  siteA: { x: 60, y: 60 },
+  siteB: { x: 60, y: 220 },
+
+  // Mid Control
+  midLeft: { x: 120, y: 140 },
+  midCenter: { x: 180, y: 140 },
+  midRight: { x: 240, y: 140 },
+
+  // A Lane (Top lane)
+  aMain: { x: 260, y: 60 },    // Attacker approach
+  aLong: { x: 180, y: 60 },    // Long sightline
+  aShort: { x: 100, y: 60 },   // Close to site
+
+  // B Lane (Bottom lane)
+  bMain: { x: 260, y: 220 },   // Attacker approach
+  bLong: { x: 180, y: 220 },   // Long sightline
+  bShort: { x: 100, y: 220 },  // Close to site
+
+  // Peek/Angle spots
+  aPeek: { x: 200, y: 60 },
+  bPeek: { x: 200, y: 220 },
+  midPeek: { x: 200, y: 140 },
+};
+
+// Tactical Lanes with peek/check points
+// Attackers come from RIGHT, push to LEFT sites
+const LANES = {
+  aPush: {
+    path: ['attackerSpawn', 'aMain', 'aPeek', 'aLong', 'aShort', 'siteA'],
+    checkPoints: ['aPeek', 'aLong'],
+    targetSite: 'siteA',
+  },
+  bPush: {
+    path: ['attackerSpawn', 'bMain', 'bPeek', 'bLong', 'bShort', 'siteB'],
+    checkPoints: ['bPeek', 'bLong'],
+    targetSite: 'siteB',
+  },
+  midToA: {
+    path: ['attackerSpawn', 'midRight', 'midPeek', 'midCenter', 'midLeft', 'aShort', 'siteA'],
+    checkPoints: ['midPeek', 'midLeft'],
+    targetSite: 'siteA',
+  },
+  midToB: {
+    path: ['attackerSpawn', 'midRight', 'midPeek', 'midCenter', 'midLeft', 'bShort', 'siteB'],
+    checkPoints: ['midPeek', 'midLeft'],
+    targetSite: 'siteB',
+  },
+};
+
+// Lane assignment strategies (how to split the team)
+const SPLIT_STRATEGIES = [
+  { lanes: ['aPush', 'aPush', 'midToA', 'midToA', 'aPush'], name: 'A Execute' },
+  { lanes: ['bPush', 'bPush', 'midToB', 'midToB', 'bPush'], name: 'B Execute' },
+  { lanes: ['aPush', 'aPush', 'midToA', 'bPush', 'bPush'], name: 'A/B Split' },
+  { lanes: ['midToA', 'midToB', 'aPush', 'bPush', 'midToA'], name: 'Spread' },
+  { lanes: ['aPush', 'bPush', 'midToA', 'midToB', 'aPush'], name: 'Default' },
+];
+
+// AI Behavior States
+const AI_STATES = {
+  IDLE: 'idle',
+  MOVING: 'moving',
+  PEEKING: 'peeking',
+  HOLDING: 'holding',
+  ENGAGING: 'engaging',
+  ROTATING: 'rotating',
+  PLANTING: 'planting',
+};
+
+// Role-based behavior modifiers
+const ROLE_BEHAVIORS = {
+  Duelist: { aggression: 0.8, entryPriority: 1, peekDuration: 400 },
+  Initiator: { aggression: 0.6, entryPriority: 2, peekDuration: 600 },
+  Controller: { aggression: 0.4, entryPriority: 3, peekDuration: 800 },
+  Sentinel: { aggression: 0.3, entryPriority: 4, peekDuration: 1000 },
+  Flex: { aggression: 0.5, entryPriority: 3, peekDuration: 600 },
+};
 
 // Team Colors
 const TEAM_COLORS = {
@@ -60,13 +146,16 @@ export default function ValorantMatchSim({ route, navigation }) {
   // State
   const [currentRound, setCurrentRound] = useState(1);
   const [score, setScore] = useState({ team1: 0, team2: 0 });
-  const [roundState, setRoundState] = useState('planning');
+  const [roundState, setRoundState] = useState('planning'); // planning, active, planted, ended
   const [timeRemaining, setTimeRemaining] = useState(100);
   const [matchData, setMatchData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [matchEnded, setMatchEnded] = useState(false);
 
-  // Map data from Valorant API
+  // Side Logic
+  const [team1Side, setTeam1Side] = useState('defend'); // Initial side
+
+  // Map data
   const [mapData, setMapData] = useState(null);
 
   // Agent States - includes HP, position, status
@@ -76,16 +165,38 @@ export default function ValorantMatchSim({ route, navigation }) {
   // Simulation positions for map
   const [simPositions, setSimPositions] = useState({ team1: [], team2: [] });
 
+  // REFS for Simulation Loop (Avoid Stale Closures)
+  const agentsRef = useRef({ team1: [], team2: [] });
+  const positionsRef = useRef({ team1: [], team2: [] });
+  const roundStateRef = useRef('planning');
+  const team1SideRef = useRef('defend'); // 'defend' or 'attack'
+
   // Services
   const valorantService = new ValorantService();
-  const aiOpponentService = new AIOpponentService();
 
-  // Route params - now includes selectedAgents from AgentPickScreen
-  const { matchId, matchData: paramMatchData, isAIMatch = false, selectedAgents = [], teamSide = 'team1' } = route.params || {};
+  // Route params
+  const { matchId, matchData: paramMatchData, selectedAgents = [], teamSide = 'team1' } = route.params || {};
 
-  // Refs
+  // Refs for intervals
   const timerRef = useRef(null);
   const simIntervalRef = useRef(null);
+
+  // Sync state to refs
+  useEffect(() => {
+    agentsRef.current = { team1: team1Agents, team2: team2Agents };
+  }, [team1Agents, team2Agents]);
+
+  useEffect(() => {
+    positionsRef.current = simPositions;
+  }, [simPositions]);
+
+  useEffect(() => {
+    roundStateRef.current = roundState;
+  }, [roundState]);
+
+  useEffect(() => {
+    team1SideRef.current = team1Side;
+  }, [team1Side]);
 
   // Initialize
   useEffect(() => {
@@ -102,13 +213,12 @@ export default function ValorantMatchSim({ route, navigation }) {
     try {
       let data = null;
 
-      // Always fetch from API to get full match data (team names, player info)
+      // Fetch match data
       if (matchId) {
         try {
           data = await valorantService.getMatch(matchId);
         } catch (err) {
-          console.error("Fetch Error", err);
-          // Fallback to paramMatchData if API fails
+          console.warn("Fetch Error, using params", err);
           data = paramMatchData;
         }
       } else {
@@ -123,100 +233,24 @@ export default function ValorantMatchSim({ route, navigation }) {
 
       setMatchData(data);
 
-      // Get player data from backend API
-      const agentsDict = data.agents || {};
-      const agentsList = Object.values(agentsDict);
-      const t1FromApi = agentsList.filter(a => a.teamId === data.team1_id);
-      const t2FromApi = agentsList.filter(a => a.teamId === data.team2_id);
+      // Initialize Agents
+      await initializeAgents(data);
 
-      // Process agents - prioritize selectedAgents from AgentPickScreen
-      let team1AgentsData = [];
-      let team2AgentsData = [];
-
-      if (selectedAgents && selectedAgents.length >= 5) {
-        // Use agents selected in AgentPickScreen, but get player names from API
-        team1AgentsData = selectedAgents.map((agent, idx) => {
-          // Try to match with API player data
-          const playerFromApi = t1FromApi[idx];
-          return {
-            id: `t1_${idx}`,
-            name: agent.name,
-            role: agent.role,
-            icon: agent.icon,
-            hp: 100,
-            isDead: false,
-            // Use player name from API if available
-            player_name: playerFromApi?.player_name || `Player ${idx + 1}`,
-            player_id: playerFromApi?.player_id,
-          };
-        });
-      } else if (t1FromApi.length >= 5) {
-        // Use API data directly (includes player_name from backend)
-        team1AgentsData = t1FromApi.map(a => ({ ...a, hp: 100, isDead: false }));
+      // Initialize Map
+      if (data.map && data.map.uuid && data.map.displayName) {
+        // Optimization: Use passed map object directly if available
+        console.log("Using passed map data:", data.map.displayName);
+        setMapData(data.map);
       } else {
-        // Fallback defaults
-        team1AgentsData = [
-          { id: 't1_1', name: 'Jett', role: 'Duelist', hp: 100, isDead: false, player_name: 'Player 1' },
-          { id: 't1_2', name: 'Sage', role: 'Sentinel', hp: 100, isDead: false, player_name: 'Player 2' },
-          { id: 't1_3', name: 'Sova', role: 'Initiator', hp: 100, isDead: false, player_name: 'Player 3' },
-          { id: 't1_4', name: 'Omen', role: 'Controller', hp: 100, isDead: false, player_name: 'Player 4' },
-          { id: 't1_5', name: 'Cypher', role: 'Sentinel', hp: 100, isDead: false, player_name: 'Player 5' },
-        ];
+        // Fallback: Fetch by name
+        const mapName = data.map?.displayName || data.map?.name || 'Ascent';
+        console.log("Fetching map data (fallback):", mapName);
+        await fetchMapData(mapName);
       }
-
-      // Enemy team (team2) - use API data directly (includes player_name)
-      if (t2FromApi.length >= 5) {
-        team2AgentsData = t2FromApi.map(a => ({ ...a, hp: 100, isDead: false }));
-      } else {
-        // Fallback defaults for enemy
-        team2AgentsData = [
-          { id: 't2_1', name: 'Reyna', role: 'Duelist', hp: 100, isDead: false, player_name: 'Enemy 1' },
-          { id: 't2_2', name: 'Brimstone', role: 'Controller', hp: 100, isDead: false, player_name: 'Enemy 2' },
-          { id: 't2_3', name: 'Breach', role: 'Initiator', hp: 100, isDead: false, player_name: 'Enemy 3' },
-          { id: 't2_4', name: 'Killjoy', role: 'Sentinel', hp: 100, isDead: false, player_name: 'Enemy 4' },
-          { id: 't2_5', name: 'Raze', role: 'Duelist', hp: 100, isDead: false, player_name: 'Enemy 5' },
-        ];
-      }
-
-      // Fetch agent icons from Valorant API for both teams
-      try {
-        const agentsResponse = await fetch('https://valorant-api.com/v1/agents?isPlayableCharacter=true');
-        const agentsJson = await agentsResponse.json();
-        if (agentsJson.status === 200) {
-          const agentIcons = {};
-          agentsJson.data.forEach(agent => {
-            agentIcons[agent.displayName.toLowerCase()] = agent.displayIcon;
-          });
-
-          // Assign icons to team1 agents (if they don't already have one from AgentPickScreen)
-          team1AgentsData = team1AgentsData.map(a => ({
-            ...a,
-            icon: a.icon || agentIcons[a.name?.toLowerCase()] || null,
-          }));
-
-          // Assign icons to team2 agents
-          team2AgentsData = team2AgentsData.map(a => ({
-            ...a,
-            icon: a.icon || agentIcons[a.name?.toLowerCase()] || null,
-          }));
-        }
-      } catch (iconErr) {
-        console.warn('Failed to fetch agent icons:', iconErr);
-      }
-
-      console.log('Team 1 Agents:', team1AgentsData);
-      console.log('Team 2 Agents:', team2AgentsData);
-
-      setTeam1Agents(team1AgentsData);
-      setTeam2Agents(team2AgentsData);
-
-      // Fetch map data from Valorant API
-      await fetchMapData(data.map?.name || 'Ascent');
-
-      // Initialize positions for map
-      initializePositions();
 
       setIsLoading(false);
+
+      // Start First Round
       startRound(1);
 
     } catch (error) {
@@ -226,289 +260,589 @@ export default function ValorantMatchSim({ route, navigation }) {
     }
   };
 
-  // Fetch map data from Valorant API
+  const initializeAgents = async (data) => {
+    const agentsDict = data.agents || {};
+    const agentsList = Object.values(agentsDict);
+    const t1FromApi = agentsList.filter(a => a.teamId === data.team1_id);
+    const t2FromApi = agentsList.filter(a => a.teamId === data.team2_id);
+
+    // Fetch Icons Mapping first to ensure we have them
+    let agentIcons = {};
+    try {
+      const response = await fetch('https://valorant-api.com/v1/agents?isPlayableCharacter=true');
+      const json = await response.json();
+      if (json.status === 200) {
+        json.data.forEach(agent => {
+          agentIcons[agent.displayName.toLowerCase()] = agent.displayIcon;
+          // Also handle cases like "KAY/O" -> "kay/o" or "kayo"
+          agentIcons[agent.displayName.replace('/', '').toLowerCase()] = agent.displayIcon;
+        });
+      }
+    } catch (e) {
+      console.warn('Icon fetch failed', e);
+    }
+
+    const processAgent = (apiAgent, index, isPlayerTeam) => {
+      // Prefer selectedAgents if this is player team and they exist
+      if (isPlayerTeam && selectedAgents[index]) {
+        const selected = selectedAgents[index];
+        return {
+          id: `t1_${index}`,
+          name: selected.name,
+          role: selected.role,
+          icon: selected.icon, // Selected agents already have icons
+          hp: 100,
+          isDead: false,
+          player_name: apiAgent?.player_name || `Player ${index + 1}`,
+          // Stats for simulation balance
+          accuracy: 0.2 + (Math.random() * 0.1), // 0.2-0.3
+          reaction: 0.5,
+        };
+      }
+
+      // Fallback or Enemy Team
+      const name = apiAgent?.name || (isPlayerTeam ? 'Jett' : 'Reyna'); // Default names
+      const cleanName = name.toLowerCase().replace('/', '');
+
+      return {
+        id: isPlayerTeam ? `t1_${index}` : `t2_${index}`,
+        name: apiAgent?.name || 'Agent',
+        role: apiAgent?.role || 'Duelist',
+        icon: apiAgent?.icon || agentIcons[cleanName] || null,
+        hp: 100,
+        isDead: false,
+        player_name: apiAgent?.player_name || (isPlayerTeam ? `Player ${index + 1}` : `Enemy ${index + 1}`),
+        accuracy: 0.18 + (Math.random() * 0.1), // Slightly lower base for enemies? or equal
+        reaction: 0.5,
+      };
+    };
+
+    // Build Team 1
+    const finalTeam1 = Array(5).fill(null).map((_, i) => processAgent(t1FromApi[i], i, true));
+
+    // Build Team 2
+    const finalTeam2 = Array(5).fill(null).map((_, i) => processAgent(t2FromApi[i], i, false));
+
+    setTeam1Agents(finalTeam1);
+    setTeam2Agents(finalTeam2);
+
+    // Update ref immediately
+    agentsRef.current = { team1: finalTeam1, team2: finalTeam2 };
+  };
+
   const fetchMapData = async (mapName) => {
     try {
       const response = await fetch('https://valorant-api.com/v1/maps');
       const json = await response.json();
       if (json.status === 200) {
-        // Find matching map by name
-        const foundMap = json.data.find(m =>
-          m.displayName.toLowerCase() === mapName.toLowerCase()
-        );
-        if (foundMap) {
-          setMapData(foundMap);
-        } else {
-          // Default to Ascent if not found
-          const defaultMap = json.data.find(m => m.displayName === 'Ascent');
-          setMapData(defaultMap || json.data[0]);
-        }
+        const foundMap = json.data.find(m => m.displayName.toLowerCase() === mapName.toLowerCase());
+        setMapData(foundMap || json.data.find(m => m.displayName === 'Ascent'));
       }
     } catch (error) {
       console.error('Failed to fetch map data:', error);
     }
   };
 
-  // Map dimensions for positioning
-  const MAP_WIDTH = 360;
-  const MAP_HEIGHT = 280;
-
-  // Objective positions on map
-  const OBJECTIVES = {
-    siteA: { x: 60, y: 80 },
-    siteB: { x: 300, y: 80 },
-    mid: { x: 180, y: 140 },
-    defenderSpawn: { x: 60, y: 200 },
-    attackerSpawn: { x: 300, y: 200 },
-  };
-
   const initializePositions = () => {
-    // Defenders (Team 1) spawn near defender spawn
-    const t1Positions = [
-      { x: 50, y: 80, target: OBJECTIVES.siteA },    // Hold A
-      { x: 70, y: 100, target: OBJECTIVES.siteA },   // Hold A
-      { x: 160, y: 140, target: OBJECTIVES.mid },    // Hold Mid
-      { x: 280, y: 80, target: OBJECTIVES.siteB },   // Hold B
-      { x: 300, y: 100, target: OBJECTIVES.siteB },  // Hold B
-    ];
-    // Attackers (Team 2) spawn near attacker spawn
-    const t2Positions = [
-      { x: 300, y: 220, target: OBJECTIVES.mid },    // Push mid
-      { x: 280, y: 230, target: OBJECTIVES.mid },    // Push mid
-      { x: 260, y: 220, target: OBJECTIVES.siteA },  // Push A
-      { x: 240, y: 230, target: OBJECTIVES.siteA },  // Push A
-      { x: 320, y: 220, target: OBJECTIVES.siteB },  // Lurk B
-    ];
-    setSimPositions({ team1: t1Positions, team2: t2Positions });
+    const isT1Attacking = team1SideRef.current === 'attack';
+    const getPos = key => MAP_POINTS[key] || { x: 180, y: 180 };
+    const jitter = (pt, amount = 15) => ({
+      x: pt.x + (Math.random() - 0.5) * amount,
+      y: pt.y + (Math.random() - 0.5) * amount
+    });
+
+    // Get agents with their roles for role-based behavior
+    const t1Agents = agentsRef.current.team1;
+    const t2Agents = agentsRef.current.team2;
+
+    // Choose attack strategy
+    const laneKeys = Object.keys(LANES);
+    const mainLane = laneKeys[Math.floor(Math.random() * laneKeys.length)];
+    const splitLane = laneKeys.find(k => k !== mainLane) || mainLane;
+    const doSplit = Math.random() > 0.6; // 40% chance to split
+
+    // Sort attackers by role priority (Duelists first)
+    const sortByEntry = (agents) => {
+      return [...agents].map((a, i) => ({ ...a, originalIdx: i }))
+        .sort((a, b) => {
+          const aPrio = ROLE_BEHAVIORS[a.role]?.entryPriority || 3;
+          const bPrio = ROLE_BEHAVIORS[b.role]?.entryPriority || 3;
+          return aPrio - bPrio;
+        });
+    };
+
+    const createAttackerPositions = (agents) => {
+      // Pick a random split strategy
+      const strategy = SPLIT_STRATEGIES[Math.floor(Math.random() * SPLIT_STRATEGIES.length)];
+      const sorted = sortByEntry(agents);
+      const positions = [];
+
+      sorted.forEach((agent, i) => {
+        // Each agent gets their own lane from the strategy
+        const laneName = strategy.lanes[i % strategy.lanes.length];
+        const lane = LANES[laneName];
+        const behavior = ROLE_BEHAVIORS[agent.role] || ROLE_BEHAVIORS.Flex;
+
+        positions[agent.originalIdx] = {
+          ...jitter(getPos('attackerSpawn'), 8),
+          path: lane.path,
+          checkPoints: lane.checkPoints,
+          pathIndex: 0,
+          aiState: AI_STATES.MOVING,
+          peekTimer: 0,
+          entryDelay: i * 250, // Stagger entry
+          aggression: behavior.aggression,
+          peekDuration: behavior.peekDuration,
+          targetEnemy: null,
+          laneName: laneName, // Track which lane
+        };
+      });
+      return positions;
+    };
+
+    const createDefenderPositions = (agents) => {
+      // Defender positions adapted to new horizontal layout
+      const holdSpots = [
+        { pos: 'siteA', facing: 'aLong' },     // Site A anchor
+        { pos: 'aShort', facing: 'aLong' },   // A short hold
+        { pos: 'midLeft', facing: 'midCenter' }, // Mid control
+        { pos: 'bShort', facing: 'bLong' },   // B short hold
+        { pos: 'siteB', facing: 'bLong' },     // Site B anchor
+      ];
+
+      return agents.map((agent, i) => {
+        const spot = holdSpots[i % holdSpots.length];
+        const behavior = ROLE_BEHAVIORS[agent.role] || ROLE_BEHAVIORS.Flex;
+
+        return {
+          ...jitter(getPos(spot.pos), 8),
+          aiState: AI_STATES.HOLDING,
+          holdAngle: spot.facing,
+          patrolRange: 15,
+          patrolTimer: 0,
+          aggression: behavior.aggression,
+          targetEnemy: null,
+        };
+      });
+    };
+
+    let attackers, defenders;
+
+    if (isT1Attacking) {
+      attackers = createAttackerPositions(t1Agents);
+      defenders = createDefenderPositions(t2Agents);
+      setSimPositions({ team1: attackers, team2: defenders });
+      positionsRef.current = { team1: attackers, team2: defenders };
+    } else {
+      attackers = createAttackerPositions(t2Agents);
+      defenders = createDefenderPositions(t1Agents);
+      setSimPositions({ team1: defenders, team2: attackers });
+      positionsRef.current = { team1: defenders, team2: attackers };
+    }
   };
 
   const startRound = (roundNum) => {
-    setRoundState('active');
-    setTimeRemaining(100);
+    stopSimulation();
 
-    // Reset agent HP for new round
+    // Side Switching Logic
+    if (roundNum === 13) {
+      Alert.alert("HALFTIME", "Switching Sides!");
+      setTeam1Side(prev => prev === 'defend' ? 'attack' : 'defend');
+      // Let effect update ref? No, update manually or wait.
+      // We'll set it here but initPos relies on Ref.
+      team1SideRef.current = (team1SideRef.current === 'defend' ? 'attack' : 'defend');
+    }
+
+    setRoundState('active');
+    setTimeRemaining(30);
+
+    // Reset HP
     setTeam1Agents(prev => prev.map(a => ({ ...a, hp: 100, isDead: false })));
     setTeam2Agents(prev => prev.map(a => ({ ...a, hp: 100, isDead: false })));
 
-    // Reset positions
+    // Delay slighty to allow state to settle if needed, but we updated Ref so it should be fine
     initializePositions();
 
-    // Start round timer
+    // Timer
     timerRef.current = setInterval(() => {
       setTimeRemaining(prev => {
         if (prev <= 1) {
-          endRound('timer');
+          // Time expired - Defenders win if spike not planted
+          // Check who is defending
+          const defender = team1SideRef.current === 'defend' ? 'team1' : 'team2';
+          endRound(defender);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    // Start simulation loop
+    // Physics Loop
     simIntervalRef.current = setInterval(simulateTick, SIM_TICK_RATE);
   };
 
   const simulateTick = () => {
-    // Move agents toward their targets
-    setSimPositions(prev => {
-      const moveAgent = (pos, speed, isDead) => {
-        if (isDead) return pos;
+    const agents = agentsRef.current;
+    if (!agents.team1.length || !agents.team2.length) return;
 
-        const dx = pos.target.x - pos.x;
-        const dy = pos.target.y - pos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+    let newPosT1 = [...positionsRef.current.team1];
+    let newPosT2 = [...positionsRef.current.team2];
 
-        if (dist < 5) {
-          // Reached target, pick new random nearby position
+    // STRICT BOUNDS: Keep agents well inside the map
+    const BOUNDS_PADDING = 25;
+    const clamp = (val, max) => Math.max(BOUNDS_PADDING, Math.min(max - BOUNDS_PADDING, val));
+    const clampPos = (pos) => ({
+      ...pos,
+      x: clamp(pos.x, MAP_WIDTH),
+      y: clamp(pos.y, MAP_HEIGHT)
+    });
+
+    const isT1Attacking = team1SideRef.current === 'attack';
+    const getPos = key => MAP_POINTS[key] || { x: 180, y: 140 };
+
+    // Find nearest enemy helper
+    const findNearestEnemy = (pos, enemyPos, enemies) => {
+      let target = null;
+      let minDist = 9999;
+      enemyPos.forEach((ep, i) => {
+        if (!enemies[i]?.isDead) {
+          const d = Math.sqrt(Math.pow(pos.x - ep.x, 2) + Math.pow(pos.y - ep.y, 2));
+          if (d < minDist) { minDist = d; target = { ...ep, idx: i }; }
+        }
+      });
+      return { target, dist: minDist };
+    };
+
+    // Attacker AI Logic
+    const moveAttacker = (pos, agentIdx, enemies, enemyPos) => {
+      const agent = isT1Attacking ? agents.team1[agentIdx] : agents.team2[agentIdx];
+      if (!agent || agent.isDead) return pos;
+
+      const { target: nearestEnemy, dist: enemyDist } = findNearestEnemy(pos, enemyPos, enemies);
+
+      // Combat check - if enemy nearby, engage
+      if (nearestEnemy && enemyDist < COMBAT_RANGE * 1.5) {
+        return { ...pos, aiState: AI_STATES.ENGAGING, targetEnemy: nearestEnemy };
+      }
+
+      // State machine
+      switch (pos.aiState) {
+        case AI_STATES.MOVING: {
+          // Check entry delay (stagger)
+          if (pos.entryDelay > 0) {
+            return { ...pos, entryDelay: pos.entryDelay - SIM_TICK_RATE };
+          }
+
+          // Move along path
+          const path = pos.path;
+          if (!path || pos.pathIndex >= path.length - 1) {
+            return { ...pos, aiState: AI_STATES.PLANTING };
+          }
+
+          const targetKey = path[pos.pathIndex + 1];
+          const targetPt = getPos(targetKey);
+          const dx = targetPt.x - pos.x;
+          const dy = targetPt.y - pos.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          // Reached waypoint
+          if (dist < 8) {
+            // Check if this is a peek checkpoint
+            if (pos.checkPoints?.includes(targetKey)) {
+              return {
+                ...pos,
+                pathIndex: pos.pathIndex + 1,
+                aiState: AI_STATES.PEEKING,
+                peekTimer: pos.peekDuration || 800
+              };
+            }
+            return { ...pos, pathIndex: pos.pathIndex + 1 };
+          }
+
+          // Move with some tactical slowdown near checkpoints
+          const speed = AGENT_SPEED * (pos.aggression || 0.5);
           return {
             ...pos,
-            x: pos.x + (Math.random() - 0.5) * 10,
-            y: pos.y + (Math.random() - 0.5) * 10,
+            x: clamp(pos.x + (dx / dist) * speed, MAP_WIDTH),
+            y: clamp(pos.y + (dy / dist) * speed, MAP_HEIGHT)
           };
         }
 
-        // Move toward target with some randomness
-        const moveX = (dx / dist) * speed + (Math.random() - 0.5) * 2;
-        const moveY = (dy / dist) * speed + (Math.random() - 0.5) * 2;
+        case AI_STATES.PEEKING: {
+          // Wait at peek spot, then continue
+          if (pos.peekTimer > 0) {
+            // Small juke movement while peeking
+            if (Math.random() < 0.15) {
+              return {
+                ...pos,
+                peekTimer: pos.peekTimer - SIM_TICK_RATE,
+                x: clamp(pos.x + (Math.random() - 0.5) * 3, MAP_WIDTH),
+                y: clamp(pos.y + (Math.random() - 0.5) * 3, MAP_HEIGHT)
+              };
+            }
+            return { ...pos, peekTimer: pos.peekTimer - SIM_TICK_RATE };
+          }
+          return { ...pos, aiState: AI_STATES.MOVING };
+        }
 
-        return {
-          ...pos,
-          x: Math.max(20, Math.min(MAP_WIDTH - 20, pos.x + moveX)),
-          y: Math.max(20, Math.min(MAP_HEIGHT - 20, pos.y + moveY)),
-        };
-      };
+        case AI_STATES.ENGAGING: {
+          // Push toward enemy
+          if (nearestEnemy && enemyDist > 20) {
+            const dx = nearestEnemy.x - pos.x;
+            const dy = nearestEnemy.y - pos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const speed = AGENT_SPEED * 1.2;
+            return {
+              ...pos,
+              x: clamp(pos.x + (dx / dist) * speed, MAP_WIDTH),
+              y: clamp(pos.y + (dy / dist) * speed, MAP_HEIGHT)
+            };
+          }
+          return pos;
+        }
 
-      const newT1 = prev.team1.map((pos, i) =>
-        moveAgent(pos, 1.5, team1Agents[i]?.isDead)
-      );
-      const newT2 = prev.team2.map((pos, i) =>
-        moveAgent(pos, 2.5, team2Agents[i]?.isDead) // Attackers move faster
-      );
+        case AI_STATES.PLANTING:
+        default:
+          // Jitter in place
+          if (Math.random() < 0.1) {
+            return {
+              ...pos,
+              x: clamp(pos.x + (Math.random() - 0.5) * 3, MAP_WIDTH),
+              y: clamp(pos.y + (Math.random() - 0.5) * 3, MAP_HEIGHT)
+            };
+          }
+          return pos;
+      }
+    };
 
-      return { team1: newT1, team2: newT2 };
-    });
+    // Defender AI Logic
+    const moveDefender = (pos, agentIdx, enemies, enemyPos) => {
+      const agent = isT1Attacking ? agents.team2[agentIdx] : agents.team1[agentIdx];
+      if (!agent || agent.isDead) return pos;
 
-    // Combat resolution - check for agents in combat range
+      const { target: nearestEnemy, dist: enemyDist } = findNearestEnemy(pos, enemyPos, enemies);
+      const myAlive = (isT1Attacking ? agents.team2 : agents.team1).filter(a => !a?.isDead).length;
+      const enemyAlive = enemies.filter(a => !a?.isDead).length;
+
+      // If enemy close, engage
+      if (nearestEnemy && enemyDist < COMBAT_RANGE * 1.2) {
+        return { ...pos, aiState: AI_STATES.ENGAGING, targetEnemy: nearestEnemy };
+      }
+
+      // Retake/Hunt mode if advantage or low enemy count
+      if (enemyAlive <= 2 || myAlive > enemyAlive + 1) {
+        if (nearestEnemy) {
+          const dx = nearestEnemy.x - pos.x;
+          const dy = nearestEnemy.y - pos.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const speed = AGENT_SPEED * (pos.aggression || 0.4);
+          return {
+            ...pos,
+            aiState: AI_STATES.ROTATING,
+            x: clamp(pos.x + (dx / dist) * speed, MAP_WIDTH),
+            y: clamp(pos.y + (dy / dist) * speed, MAP_HEIGHT)
+          };
+        }
+      }
+
+      // Hold angle with micro-adjustments
+      switch (pos.aiState) {
+        case AI_STATES.HOLDING: {
+          // Small patrol/juke movements
+          pos.patrolTimer = (pos.patrolTimer || 0) + SIM_TICK_RATE;
+          if (pos.patrolTimer > 1000 && Math.random() < 0.2) {
+            return {
+              ...pos,
+              patrolTimer: 0,
+              x: clamp(pos.x + (Math.random() - 0.5) * pos.patrolRange, MAP_WIDTH),
+              y: clamp(pos.y + (Math.random() - 0.5) * pos.patrolRange, MAP_HEIGHT)
+            };
+          }
+          return pos;
+        }
+
+        case AI_STATES.ENGAGING: {
+          if (nearestEnemy && enemyDist > 15) {
+            const dx = nearestEnemy.x - pos.x;
+            const dy = nearestEnemy.y - pos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            return {
+              ...pos,
+              x: clamp(pos.x + (dx / dist) * AGENT_SPEED, MAP_WIDTH),
+              y: clamp(pos.y + (dy / dist) * AGENT_SPEED, MAP_HEIGHT)
+            };
+          }
+          return pos;
+        }
+
+        default:
+          return pos;
+      }
+    };
+
+    // Apply movement
+    if (isT1Attacking) {
+      newPosT1 = newPosT1.map((p, i) => moveAttacker(p, i, agents.team2, positionsRef.current.team2));
+      newPosT2 = newPosT2.map((p, i) => moveDefender(p, i, agents.team1, positionsRef.current.team1));
+    } else {
+      newPosT1 = newPosT1.map((p, i) => moveDefender(p, i, agents.team2, positionsRef.current.team2));
+      newPosT2 = newPosT2.map((p, i) => moveAttacker(p, i, agents.team1, positionsRef.current.team1));
+    }
+
+    // FINAL BOUNDS ENFORCEMENT: Clamp all positions before saving
+    newPosT1 = newPosT1.map(clampPos);
+    newPosT2 = newPosT2.map(clampPos);
+
+    setSimPositions({ team1: newPosT1, team2: newPosT2 });
+    positionsRef.current = { team1: newPosT1, team2: newPosT2 };
+
     resolveCombat();
   };
 
   const resolveCombat = () => {
-    const combatRange = 50;
+    const agents = agentsRef.current;
+    const pos = positionsRef.current;
 
-    // For each attacker, check if near a defender
-    simPositions.team2.forEach((attackerPos, aIdx) => {
-      if (team2Agents[aIdx]?.isDead) return;
+    // Check collisions
+    let t1Updates = [...agents.team1];
+    let t2Updates = [...agents.team2];
+    let combatOccurred = false;
 
-      simPositions.team1.forEach((defenderPos, dIdx) => {
-        if (team1Agents[dIdx]?.isDead) return;
+    // Naive O(N^2) check is fine for 10 agents
+    pos.team2.forEach((p2, i2) => {
+      if (t2Updates[i2].isDead) return;
 
-        const dx = attackerPos.x - defenderPos.x;
-        const dy = attackerPos.y - defenderPos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+      pos.team1.forEach((p1, i1) => {
+        if (t1Updates[i1].isDead) return;
 
-        if (dist < combatRange) {
-          // Combat! Random outcome with skill factor
-          const attackerWins = Math.random() > 0.5;
+        const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 
-          if (attackerWins) {
-            // Defender takes damage
-            setTeam1Agents(prev => prev.map((a, i) => {
-              if (i === dIdx && !a.isDead) {
-                const damage = Math.floor(Math.random() * 40 + 20);
-                const newHp = Math.max(0, a.hp - damage);
-                return { ...a, hp: newHp, isDead: newHp === 0 };
-              }
-              return a;
-            }));
+        if (dist < COMBAT_RANGE) {
+          combatOccurred = true;
+
+          // BALANCED COMBAT: Pure skill-based random roll (no defender advantage)
+          // Both teams have equal chance based on their accuracy
+          const roll1 = Math.random() * (t1Updates[i1].accuracy || 0.2);
+          const roll2 = Math.random() * (t2Updates[i2].accuracy || 0.2);
+
+          // Add slight randomness to prevent always same winner
+          const finalRoll1 = roll1 + Math.random() * 0.05;
+          const finalRoll2 = roll2 + Math.random() * 0.05;
+
+          if (finalRoll1 > finalRoll2) {
+            // Team 1 hits Team 2
+            const dmg = Math.floor(Math.random() * 25 + 20); // 20-45 damage
+            t2Updates[i2].hp = Math.max(0, t2Updates[i2].hp - dmg);
+            if (t2Updates[i2].hp === 0) t2Updates[i2].isDead = true;
           } else {
-            // Attacker takes damage
-            setTeam2Agents(prev => prev.map((a, i) => {
-              if (i === aIdx && !a.isDead) {
-                const damage = Math.floor(Math.random() * 40 + 20);
-                const newHp = Math.max(0, a.hp - damage);
-                return { ...a, hp: newHp, isDead: newHp === 0 };
-              }
-              return a;
-            }));
+            // Team 2 hits Team 1
+            const dmg = Math.floor(Math.random() * 25 + 20); // 20-45 damage
+            t1Updates[i1].hp = Math.max(0, t1Updates[i1].hp - dmg);
+            if (t1Updates[i1].hp === 0) t1Updates[i1].isDead = true;
           }
         }
       });
     });
 
-    // Check for round end
-    checkElimination();
-  };
-
-  const checkElimination = () => {
-    const t1Alive = team1Agents.filter(a => !a.isDead).length;
-    const t2Alive = team2Agents.filter(a => !a.isDead).length;
-
-    if (t1Alive === 0) {
-      endRound('team2'); // Attackers win
-    } else if (t2Alive === 0) {
-      endRound('team1'); // Defenders win
+    if (combatOccurred) {
+      setTeam1Agents(t1Updates);
+      setTeam2Agents(t2Updates);
     }
 
-    // Check if attackers reached site (spike plant simulation)
-    const attackersAtSite = simPositions.team2.filter((pos, i) => {
-      if (team2Agents[i]?.isDead) return false;
-      const distToA = Math.sqrt(Math.pow(pos.x - OBJECTIVES.siteA.x, 2) + Math.pow(pos.y - OBJECTIVES.siteA.y, 2));
-      const distToB = Math.sqrt(Math.pow(pos.x - OBJECTIVES.siteB.x, 2) + Math.pow(pos.y - OBJECTIVES.siteB.y, 2));
-      return distToA < 30 || distToB < 30;
-    }).length;
+    // Check Round End Conditions
+    const t1Alive = t1Updates.filter(a => !a.isDead).length;
+    const t2Alive = t2Updates.filter(a => !a.isDead).length;
 
-    // If 2+ attackers reach site, they have advantage
-    if (attackersAtSite >= 2 && timeRemaining < 50 && Math.random() < 0.02) {
-      endRound('team2'); // Spike plant win
-    }
+    if (t1Alive === 0) endRound('team2');
+    else if (t2Alive === 0) endRound('team1');
   };
 
   const endRound = (winner) => {
     stopSimulation();
     setRoundState('ended');
 
-    // Update score - timer expiry favors defenders
-    const roundWinner = winner === 'timer' ? 'team1' : winner;
     setScore(prev => {
       const newScore = {
-        team1: roundWinner === 'team1' ? prev.team1 + 1 : prev.team1,
-        team2: roundWinner === 'team2' ? prev.team2 + 1 : prev.team2,
+        team1: winner === 'team1' ? prev.team1 + 1 : prev.team1,
+        team2: winner === 'team2' ? prev.team2 + 1 : prev.team2,
       };
 
-      // Check match end
-      if (newScore.team1 >= MAX_ROUNDS || newScore.team2 >= MAX_ROUNDS) {
+      // Check if match ended
+      // Rule: Reach 13 AND lead by 2. If 12-12, goes to OT (needs 14-12, etc)
+      const maxScore = Math.max(newScore.team1, newScore.team2);
+      const diff = Math.abs(newScore.team1 - newScore.team2);
+
+      if (maxScore >= MAX_ROUNDS_REGULATION && diff >= 2) {
         setMatchEnded(true);
-        Alert.alert(
-          'Match Complete!',
-          `${newScore.team1 > newScore.team2 ? matchData?.team1?.name || 'Team 1' : matchData?.team2?.name || 'Team 2'} wins!`,
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
+        setTimeout(() => {
+          Alert.alert(
+            'Match Complete',
+            `${newScore.team1 > newScore.team2 ? matchData?.team1?.name : matchData?.team2?.name} Wins ${newScore.team1}-${newScore.team2}!`,
+            [{
+              text: 'Exit',
+              onPress: () => {
+                // Reset to Home
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'FpsHomeScreen' }],
+                });
+              }
+            }]
+          );
+        }, 500);
+      } else {
+        // Next round
+        if (!matchEnded) {
+          setTimeout(() => {
+            setCurrentRound(r => r + 1);
+            startRound(currentRound + 1);
+          }, 3000);
+        }
       }
       return newScore;
     });
-
-    // Start next round after delay
-    if (!matchEnded && currentRound < MAX_ROUNDS * 2 - 1) {
-      setTimeout(() => {
-        setCurrentRound(prev => prev + 1);
-        initializePositions();
-        startRound(currentRound + 1);
-      }, 2000);
-    }
   };
 
-  // === RENDER COMPONENTS ===
+  // === RENDER COMPONENTS === (Kept mostly same, added safe checks)
 
-  // Scoreboard Header
   const renderScoreboard = () => (
     <View style={styles.scoreboard}>
-      {/* Team 1 Name */}
       <View style={styles.teamNameContainer}>
         <View style={[styles.teamLogo, { backgroundColor: TEAM_COLORS.team1.primary }]}>
-          <Text style={styles.teamLogoText}>
-            {(matchData?.team1?.name || 'TEAM 1').charAt(0)}
-          </Text>
+          <Text style={styles.teamLogoText}>{(matchData?.team1?.name || 'T1').charAt(0)}</Text>
         </View>
         <Text style={[styles.teamName, { color: TEAM_COLORS.team1.primary }]}>
-          {matchData?.team1?.name || 'PHANTOM GAMING'}
+          {matchData?.team1?.name || 'TEAM 1'}
         </Text>
       </View>
 
-      {/* Score */}
       <View style={styles.scoreContainer}>
-        <Text style={styles.scoreLabel}>SCOREBOARD</Text>
+        <Text style={styles.scoreLabel}>vct masters</Text>
         <View style={styles.scoreRow}>
           <Text style={[styles.scoreText, { color: TEAM_COLORS.team1.primary }]}>{score.team1}</Text>
-          <Text style={styles.scoreDivider}>-</Text>
+          <Text style={styles.scoreDivider}>:</Text>
           <Text style={[styles.scoreText, { color: TEAM_COLORS.team2.primary }]}>{score.team2}</Text>
         </View>
         <View style={styles.roundInfo}>
-          <Text style={styles.roundText}>ROUND {currentRound}</Text>
-          {roundState === 'active' && (
-            <View style={styles.liveBadge}>
-              <View style={styles.liveIndicator} />
-              <Text style={styles.liveText}>LIVE</Text>
-            </View>
-          )}
+          <Text style={styles.roundText}>
+            {score.team1 >= 12 && score.team2 >= 12 ? 'OVERTIME' : `ROUND ${currentRound}`}
+          </Text>
         </View>
       </View>
 
-      {/* Team 2 Name */}
       <View style={[styles.teamNameContainer, { alignItems: 'flex-end' }]}>
         <View style={[styles.teamLogo, { backgroundColor: TEAM_COLORS.team2.primary }]}>
-          <Text style={styles.teamLogoText}>
-            {(matchData?.team2?.name || 'TEAM 2').charAt(0)}
-          </Text>
+          <Text style={styles.teamLogoText}>{(matchData?.team2?.name || 'T2').charAt(0)}</Text>
         </View>
         <Text style={[styles.teamName, { color: TEAM_COLORS.team2.primary }]}>
-          {matchData?.team2?.name || 'TITAN ESPORTS'}
+          {matchData?.team2?.name || 'TEAM 2'}
         </Text>
       </View>
     </View>
   );
 
-  // Player Card
   const renderPlayerCard = (agent, index, team) => {
+    if (!agent) return null;
     const colors = TEAM_COLORS[team];
     const hpPercent = agent.hp / 100;
 
@@ -518,492 +852,311 @@ export default function ValorantMatchSim({ route, navigation }) {
         style={[
           styles.playerCard,
           {
-            backgroundColor: agent.isDead ? 'rgba(50,50,50,0.5)' : colors.bg,
+            backgroundColor: agent.isDead ? 'rgba(0,0,0,0.6)' : colors.bg,
             borderColor: agent.isDead ? '#444' : colors.border,
-            opacity: agent.isDead ? 0.6 : 1,
+            opacity: agent.isDead ? 0.5 : 1,
           }
         ]}
       >
-        {/* Avatar */}
-        <View style={[styles.playerAvatar, { borderColor: colors.primary }]}>
-          <Text style={styles.avatarText}>👤</Text>
-        </View>
-
-        {/* Info */}
         <View style={styles.playerInfo}>
-          <Text style={styles.playerName} numberOfLines={1}>
-            {agent.player_name || `Player ${index + 1}`}
-          </Text>
-          <View style={styles.agentRow}>
-            <Text style={styles.agentIcon}>{ROLE_ICONS[agent.role] || '✦'}</Text>
-            <Text style={styles.agentName}>{agent.name}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={styles.playerName} numberOfLines={1}>{agent.player_name}</Text>
+            <Text style={styles.agentIcon}>{ROLE_ICONS[agent.role]}</Text>
           </View>
-          {/* Health Bar */}
+          <Text style={[styles.agentName, { color: '#fff' }]}>{agent.name}</Text>
           <View style={styles.healthBarContainer}>
             <View style={[styles.healthBar, { width: `${hpPercent * 100}%` }]} />
           </View>
         </View>
 
-        {/* Agent Icon */}
+        {/* Agent Icon or Fallback */}
         <View style={[styles.agentAvatar, { borderColor: colors.primary }]}>
-          <Text style={styles.agentAvatarIcon}>{ROLE_ICONS[agent.role] || '✦'}</Text>
+          {agent.icon ? (
+            <Image source={{ uri: agent.icon }} style={{ width: '100%', height: '100%', borderRadius: 4 }} />
+          ) : (
+            <Text style={styles.agentAvatarIcon}>{ROLE_ICONS[agent.role]}</Text>
+          )}
         </View>
-
-        {/* Dead Overlay */}
-        {agent.isDead && (
-          <View style={styles.deadOverlay}>
-            <Text style={styles.deadText}>☠️</Text>
-          </View>
-        )}
       </View>
     );
   };
 
-  // Team Panel
-  const renderTeamPanel = (agents, team) => (
-    <View style={styles.teamPanel}>
-      {agents.map((agent, index) => renderPlayerCard(agent, index, team))}
-    </View>
-  );
-
-  // Tactical Map
   const renderTacticalMap = () => (
     <View style={styles.mapContainer}>
-      {/* Map Background with actual map image */}
       <ImageBackground
         source={{ uri: mapData?.displayIcon || mapData?.splash }}
         style={styles.mapBackground}
-        imageStyle={{ borderRadius: 12, opacity: 0.8 }}
-        resizeMode="cover"
+        imageStyle={{ borderRadius: 12, opacity: 0.6 }} // Dimmed for contrast
+        resizeMode="contain"
       >
-        {/* Dark Overlay for better visibility */}
-        <View style={styles.mapOverlay} />
-
-        {/* Map Name */}
-        <View style={styles.mapNameBadge}>
-          <Text style={styles.mapNameText}>{mapData?.displayName || 'Unknown Map'}</Text>
-        </View>
-
-        {/* Site Labels */}
-        <View style={[styles.siteLabel, { left: 20, top: 50 }]}>
-          <Text style={styles.siteLabelText}>A</Text>
-        </View>
-        <View style={[styles.siteLabel, { right: 20, top: 50 }]}>
-          <Text style={styles.siteLabelText}>B</Text>
-        </View>
-        <View style={[styles.siteLabel, { left: '45%', top: '45%' }]}>
-          <Text style={[styles.siteLabelText, { fontSize: 12 }]}>MID</Text>
-        </View>
-
-        {/* Agent Markers - Team 1 */}
+        {/* Agents T1 */}
         {simPositions.team1.map((pos, i) => {
           const agent = team1Agents[i];
+          if (!agent) return null;
           return (
             <Animatable.View
               key={`t1-${i}`}
-              animation="pulse"
-              iterationCount="infinite"
-              duration={2000}
+              transition={["left", "top"]}
+              duration={SIM_TICK_RATE}
               style={[
                 styles.agentMarker,
                 {
-                  left: pos.x,
-                  top: pos.y,
+                  left: pos.x, top: pos.y,
                   borderColor: TEAM_COLORS.team1.primary,
-                  backgroundColor: agent?.isDead ? '#333' : 'rgba(59, 130, 246, 0.3)',
-                  opacity: agent?.isDead ? 0.4 : 1,
+                  backgroundColor: agent.isDead ? '#333' : TEAM_COLORS.team1.primary,
+                  opacity: agent.isDead ? 0.3 : 1,
+                  zIndex: agent.isDead ? 1 : 10,
                 }
               ]}
             >
-              {agent?.icon ? (
-                <Image
-                  source={{ uri: agent.icon }}
-                  style={styles.agentMarkerIcon}
-                  resizeMode="cover"
-                />
+              {agent.icon ? (
+                <Image source={{ uri: agent.icon }} style={styles.markerImage} />
               ) : (
-                <Text style={styles.markerText}>{agent?.name?.charAt(0) || (i + 1)}</Text>
+                <Text style={{ fontSize: 8, color: '#fff' }}>{agent.name[0]}</Text>
               )}
-              {agent?.isDead && <View style={styles.deadMarkerOverlay} />}
             </Animatable.View>
           );
         })}
 
-        {/* Agent Markers - Team 2 */}
+        {/* Agents T2 */}
         {simPositions.team2.map((pos, i) => {
           const agent = team2Agents[i];
+          if (!agent) return null;
           return (
             <Animatable.View
               key={`t2-${i}`}
-              animation="pulse"
-              iterationCount="infinite"
-              duration={2000}
+              transition={["left", "top"]}
+              duration={SIM_TICK_RATE}
               style={[
                 styles.agentMarker,
                 {
-                  left: pos.x,
-                  top: pos.y,
+                  left: pos.x, top: pos.y,
                   borderColor: TEAM_COLORS.team2.primary,
-                  backgroundColor: agent?.isDead ? '#333' : 'rgba(239, 68, 68, 0.3)',
-                  opacity: agent?.isDead ? 0.4 : 1,
+                  backgroundColor: agent.isDead ? '#333' : TEAM_COLORS.team2.primary,
+                  opacity: agent.isDead ? 0.3 : 1,
+                  zIndex: agent.isDead ? 1 : 10,
                 }
               ]}
             >
-              {agent?.icon ? (
-                <Image
-                  source={{ uri: agent.icon }}
-                  style={styles.agentMarkerIcon}
-                  resizeMode="cover"
-                />
+              {agent.icon ? (
+                <Image source={{ uri: agent.icon }} style={styles.markerImage} />
               ) : (
-                <Text style={styles.markerText}>{agent?.name?.charAt(0) || (i + 1)}</Text>
+                <Text style={{ fontSize: 8, color: '#fff' }}>{agent.name[0]}</Text>
               )}
-              {agent?.isDead && <View style={styles.deadMarkerOverlay} />}
             </Animatable.View>
           );
         })}
 
         {/* Timer */}
-        {roundState === 'active' && (
-          <View style={styles.mapTimer}>
-            <Text style={styles.mapTimerText}>{timeRemaining}s</Text>
-          </View>
-        )}
+        <View style={styles.mapTimer}>
+          <Text style={[styles.mapTimerText, { color: timeRemaining < 10 ? '#ef4444' : '#fff' }]}>
+            {timeRemaining}
+          </Text>
+        </View>
 
-        {/* LIVE Badge */}
-        {roundState === 'active' && (
-          <View style={styles.mapLiveBadge}>
-            <View style={styles.liveIndicator} />
-            <Text style={styles.mapLiveText}>LIVE</Text>
-          </View>
-        )}
       </ImageBackground>
     </View>
   );
 
-  // Loading State
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <Animatable.Text animation="pulse" iterationCount="infinite" style={styles.loadingText}>
-          Loading Match...
-        </Animatable.Text>
+        <Text style={styles.loadingText}>Loading Match Data...</Text>
       </View>
     );
   }
 
   return (
     <LinearGradient colors={['#0f172a', '#1e293b', '#0f172a']} style={styles.container}>
-      {/* Scoreboard */}
       {renderScoreboard()}
 
-      {/* Main Content */}
+      {/* Scrollable Content for small screens if needed, though we try to fit */}
       <View style={styles.mainContent}>
-        {/* Team 1 Panel */}
-        {renderTeamPanel(team1Agents, 'team1')}
 
-        {/* Tactical Map */}
-        {renderTacticalMap()}
+        {/* TOP: TACTICAL MAP */}
+        <View style={styles.mapContainer}>
+          <ImageBackground
+            source={{ uri: mapData?.displayIcon || mapData?.splash }}
+            style={styles.mapBackground}
+            imageStyle={{ borderRadius: 12, opacity: 0.6 }}
+            resizeMode="contain"
+          >
+            {/* T1 Agents */}
+            {simPositions.team1.map((pos, i) => {
+              const agent = team1Agents[i];
+              if (!agent) return null;
+              return (
+                <Animatable.View
+                  key={`t1-${i}`}
+                  transition={["left", "top"]}
+                  duration={SIM_TICK_RATE}
+                  style={[
+                    styles.agentMarker,
+                    {
+                      left: pos.x, top: pos.y,
+                      borderColor: TEAM_COLORS.team1.primary,
+                      backgroundColor: agent.isDead ? '#333' : TEAM_COLORS.team1.primary,
+                      opacity: agent.isDead ? 0.3 : 1,
+                      zIndex: agent.isDead ? 1 : 10,
+                    }
+                  ]}
+                >
+                  {agent.icon ? (
+                    <Image source={{ uri: agent.icon }} style={styles.markerImage} />
+                  ) : (
+                    <Text style={{ fontSize: 8, color: '#fff' }}>{agent.name[0]}</Text>
+                  )}
+                </Animatable.View>
+              );
+            })}
 
-        {/* Team 2 Panel */}
-        {renderTeamPanel(team2Agents, 'team2')}
+            {/* T2 Agents */}
+            {simPositions.team2.map((pos, i) => {
+              const agent = team2Agents[i];
+              if (!agent) return null;
+              return (
+                <Animatable.View
+                  key={`t2-${i}`}
+                  transition={["left", "top"]}
+                  duration={SIM_TICK_RATE}
+                  style={[
+                    styles.agentMarker,
+                    {
+                      left: pos.x, top: pos.y,
+                      borderColor: TEAM_COLORS.team2.primary,
+                      backgroundColor: agent.isDead ? '#333' : TEAM_COLORS.team2.primary,
+                      opacity: agent.isDead ? 0.3 : 1,
+                      zIndex: agent.isDead ? 1 : 10,
+                    }
+                  ]}
+                >
+                  {agent.icon ? (
+                    <Image source={{ uri: agent.icon }} style={styles.markerImage} />
+                  ) : (
+                    <Text style={{ fontSize: 8, color: '#fff' }}>{agent.name[0]}</Text>
+                  )}
+                </Animatable.View>
+              );
+            })}
+
+            {/* Timer */}
+            <View style={styles.mapTimer}>
+              <Text style={[styles.mapTimerText, { color: timeRemaining < 10 ? '#ef4444' : '#fff' }]}>
+                {timeRemaining}
+              </Text>
+            </View>
+          </ImageBackground>
+        </View>
+
+        {/* BOTTOM: TEAMS GRID */}
+        <View style={styles.teamsGrid}>
+          <View style={styles.teamColumn}>
+            <Text style={[styles.columnHeader, { color: TEAM_COLORS.team1.primary }]}>DEFENDERS</Text>
+            {team1Agents.map((a, i) => renderPlayerCard(a, i, 'team1'))}
+          </View>
+          <View style={styles.teamColumn}>
+            <Text style={[styles.columnHeader, { color: TEAM_COLORS.team2.primary }]}>ATTACKERS</Text>
+            {team2Agents.map((a, i) => renderPlayerCard(a, i, 'team2'))}
+          </View>
+        </View>
+
       </View>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-  },
-  loadingText: {
-    color: '#fff',
-    fontSize: 18,
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' },
+  loadingText: { color: '#fff', fontSize: 18 },
 
   // Scoreboard
   scoreboard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    marginBottom: 10
   },
-  teamNameContainer: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  teamLogo: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  teamLogoText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  teamName: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  scoreContainer: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  scoreLabel: {
-    color: '#94a3b8',
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  scoreText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  scoreDivider: {
-    color: '#fff',
-    fontSize: 24,
-    marginHorizontal: 12,
-  },
-  roundInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  roundText: {
-    color: '#94a3b8',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  liveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  liveIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#ef4444',
-    marginRight: 4,
-  },
-  liveText: {
-    color: '#ef4444',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
+  teamNameContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  teamLogo: { width: 32, height: 32, borderRadius: 4, justifyContent: 'center', alignItems: 'center' },
+  teamLogoText: { color: '#fff', fontWeight: 'bold' },
+  teamName: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  scoreContainer: { alignItems: 'center', minWidth: 80 },
+  scoreLabel: { color: '#94a3b8', fontSize: 10, textTransform: 'uppercase' },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  scoreText: { fontSize: 32, fontWeight: 'bold' },
+  scoreDivider: { color: '#64748b', fontSize: 24 },
+  roundInfo: { marginTop: -2 },
+  roundText: { color: '#e2e8f0', fontSize: 12, fontWeight: 'bold' },
 
   // Main Content
-  mainContent: {
-    flex: 1,
-    flexDirection: 'row',
-    padding: 10,
-  },
-
-  // Team Panel
-  teamPanel: {
-    width: 160,
-    gap: 8,
-  },
-  playerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    position: 'relative',
-  },
-  playerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  avatarText: {
-    fontSize: 18,
-  },
-  playerInfo: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  playerName: {
-    color: '#e2e8f0',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  agentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  agentIcon: {
-    fontSize: 10,
-    marginRight: 4,
-  },
-  agentName: {
-    color: '#94a3b8',
-    fontSize: 10,
-  },
-  healthBarContainer: {
-    height: 4,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 2,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  healthBar: {
-    height: '100%',
-    backgroundColor: '#22c55e',
-    borderRadius: 2,
-  },
-  agentAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  agentAvatarIcon: {
-    fontSize: 14,
-  },
-  deadOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deadText: {
-    fontSize: 24,
-  },
+  mainContent: { flex: 1, flexDirection: 'column', paddingHorizontal: 10 },
 
   // Map
   mapContainer: {
-    flex: 1,
-    marginHorizontal: 10,
-  },
-  mapBackground: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
+    width: '100%',
+    aspectRatio: 1.3, // Slightly wider than tall for standard layouts
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    position: 'relative',
     overflow: 'hidden',
+    backgroundColor: '#000',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
   },
-  siteLabel: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
+  mapBackground: { flex: 1, width: '100%', height: '100%' },
+  agentMarker: { position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 2, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  markerImage: { width: '100%', height: '100%' },
+  mapTimer: { position: 'absolute', top: 10, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 },
+  mapTimerText: { fontWeight: 'bold', fontSize: 16 },
+
+  // Teams Grid
+  teamsGrid: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10
   },
-  siteLabelText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: 'bold',
+  teamColumn: {
+    flex: 1,
+    gap: 6
   },
-  agentMarker: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  markerText: {
-    color: '#fff',
+  columnHeader: {
     fontSize: 10,
     fontWeight: 'bold',
-  },
-  mapTimer: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  mapTimerText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  mapOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
-  },
-  mapNameBadge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  mapNameText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    marginBottom: 4,
+    textAlign: 'center',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1
   },
-  mapLiveBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 60,
+
+  // Player Card
+  playerCard: {
+    padding: 6,
+    borderRadius: 6,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.03)'
+  },
+  playerInfo: { flex: 1 },
+  playerName: { color: '#94a3b8', fontSize: 10 },
+  agentName: { fontWeight: 'bold', fontSize: 11, color: '#fff' },
+  healthBarContainer: { height: 3, backgroundColor: 'rgba(255,255,255,0.1)', marginTop: 4, borderRadius: 2 },
+  healthBar: { height: '100%', backgroundColor: '#22c55e', borderRadius: 2 },
+  agentIcon: { fontSize: 10, color: '#cbd5e1' },
+
+  agentAvatar: {
+    width: 28,
+    height: 28,
     borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1
   },
-  mapLiveText: {
-    color: '#ef4444',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  agentMarkerIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-  },
-  deadMarkerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-  },
+  agentAvatarIcon: { fontSize: 14 },
 });

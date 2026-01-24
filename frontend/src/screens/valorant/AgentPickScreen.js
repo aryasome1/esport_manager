@@ -39,7 +39,17 @@ const ROLE_ICONS = {
 };
 
 export default function AgentPickScreen({ route, navigation }) {
-    const { matchId, matchData, teamSide = 'team1' } = route.params || {};
+    // BO3 Support: Accept array of maps and current map index
+    const {
+        matchId,
+        matchData,
+        teamSide = 'team1',
+        bo3Maps = [],      // Array of 3 maps from DraftMapScreen
+        currentMapIndex = 0, // Which map we're playing (0, 1, 2)
+        bo3Score = { player: 0, cpu: 0 }, // Track BO3 score
+    } = route.params || {};
+
+    const currentMap = bo3Maps[currentMapIndex] || null;
 
     const [loading, setLoading] = useState(true);
     const [agents, setAgents] = useState([]);
@@ -106,12 +116,19 @@ export default function AgentPickScreen({ route, navigation }) {
             return;
         }
 
-        // Navigate to simulation with selected agents
+        // Navigate to simulation with selected agents and BO3 data
         navigation.replace('ValorantMatchSim', {
             matchId,
-            matchData,
+            matchData: {
+                ...matchData,
+                map: currentMap, // Pass current map from BO3
+            },
             selectedAgents,
             teamSide,
+            // BO3 tracking
+            bo3Maps,
+            currentMapIndex,
+            bo3Score,
         });
     };
 
@@ -201,8 +218,27 @@ export default function AgentPickScreen({ route, navigation }) {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>AGENT SELECT</Text>
-                <Text style={styles.headerSubtitle}>Pick 5 agents for your team</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.headerTitle}>AGENT SELECT</Text>
+                    {currentMap ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                            <Text style={styles.headerSubtitle}>
+                                MAP {currentMapIndex + 1}/3: {currentMap.displayName?.toUpperCase()}
+                            </Text>
+                            <View style={{ marginLeft: 12, flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={{ color: '#22c55e', fontWeight: 'bold', fontSize: 12 }}>
+                                    YOU {bo3Score.player}
+                                </Text>
+                                <Text style={{ color: '#64748b', marginHorizontal: 4 }}>-</Text>
+                                <Text style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 12 }}>
+                                    {bo3Score.cpu} CPU
+                                </Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <Text style={styles.headerSubtitle}>Pick 5 agents for your team</Text>
+                    )}
+                </View>
             </View>
 
             {/* Selected Agents Bar */}

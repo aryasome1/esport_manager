@@ -75,10 +75,11 @@ export default function TacticalMatchScreen({ navigation }) {
         activeOpacity={0.9}
         onPress={() => {
           if (item.status === 'scheduled') {
-            // Navigate to Agent Pick Screen first
-            navigation.navigate('AgentPickScreen', {
+            // Navigate to Map Draft Screen first for BO3 veto
+            navigation.navigate('DraftMapScreen', {
               matchId: item.id,
               matchData: item,
+              opponentTeam: item.team2,
               isAIMatch: !!item.ai_opponent_id
             });
           }

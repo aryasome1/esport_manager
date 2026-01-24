@@ -33,11 +33,11 @@ export default function FpsHomeScreen({ navigation }) {
     try {
       const teamId = user?.team_id || 1;
       const response = await apiClient.get(`/api/teams/${teamId}`);
-      
+
       if (response.data) {
         const t = response.data;
-        const wr = t.total_matches > 0 
-          ? ((t.wins / t.total_matches) * 100).toFixed(1) 
+        const wr = t.total_matches > 0
+          ? ((t.wins / t.total_matches) * 100).toFixed(1)
           : 0;
 
         setTeamStats(prev => ({
@@ -60,8 +60,8 @@ export default function FpsHomeScreen({ navigation }) {
   };
 
   const MenuCard = ({ title, subtitle, icon, color, onPress, fullWidth }) => (
-    <TouchableOpacity 
-      style={[styles.menuCard, fullWidth ? styles.fullWidthCard : styles.halfWidthCard]} 
+    <TouchableOpacity
+      style={[styles.menuCard, fullWidth ? styles.fullWidthCard : styles.halfWidthCard]}
       activeOpacity={0.9}
       onPress={onPress}
     >
@@ -92,28 +92,28 @@ export default function FpsHomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: 20 }]}>
-        
+
         {/* [NEW] Header Row with Exit Button */}
         <View style={styles.headerRow}>
-            <View>
-                <Text style={styles.greeting}>OPERATOR</Text>
-                <Text style={styles.username}>{user?.username?.toUpperCase()}</Text>
-            </View>
+          <View>
+            <Text style={styles.greeting}>OPERATOR</Text>
+            <Text style={styles.username}>{user?.username?.toUpperCase()}</Text>
+          </View>
 
-            <TouchableOpacity 
-                style={styles.exitButton}
-                activeOpacity={0.7}
-                onPress={() => navigation.goBack()} // Kembali ke Division Select
-            >
-                <Text style={styles.exitText}>LEAVE PROTOCOL</Text>
-                <MaterialCommunityIcons name="logout-variant" size={16} color="#ff4655" />
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.exitButton}
+            activeOpacity={0.7}
+            onPress={() => navigation.goBack()} // Kembali ke Division Select
+          >
+            <Text style={styles.exitText}>LEAVE PROTOCOL</Text>
+            <MaterialCommunityIcons name="logout-variant" size={16} color="#ff4655" />
+          </TouchableOpacity>
         </View>
 
         {/* Team Performance Card */}
         <View style={styles.statsCard}>
           <LinearGradient
-            colors={['#ff4655', '#bd3944']} 
+            colors={['#ff4655', '#bd3944']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.statsGradient}
@@ -140,29 +140,29 @@ export default function FpsHomeScreen({ navigation }) {
         {/* Quick Actions Grid */}
         <Text style={styles.sectionTitle}>OPERATIONS</Text>
         <View style={styles.gridContainer}>
-          <MenuCard 
-            title="Active Roster" 
+          <MenuCard
+            title="Active Roster"
             subtitle="Manage Agents & Roles"
             icon="account-group"
             color="#38bdf8"
             onPress={() => navigation.navigate('Team')}
           />
-          <MenuCard 
-            title="Agent Pool" 
+          <MenuCard
+            title="Agent Pool"
             subtitle="Analyze Meta Picks"
             icon="incognito"
             color="#a855f7"
             onPress={() => navigation.navigate('AgentList')}
           />
-          <MenuCard 
-            title="Map Strategies" 
+          <MenuCard
+            title="Map Strategies"
             subtitle="Lineups & Setups"
             icon="map-legend"
             color="#22c55e"
             onPress={() => navigation.navigate('MapPool')}
           />
-          <MenuCard 
-            title="Match Schedule" 
+          <MenuCard
+            title="Match Schedule"
             subtitle="Upcoming Scrims"
             icon="calendar-clock"
             color="#f59e0b"
@@ -172,34 +172,37 @@ export default function FpsHomeScreen({ navigation }) {
 
         {/* Next Match Teaser */}
         <Text style={styles.sectionTitle}>NEXT ASSIGNMENT</Text>
-        <TouchableOpacity 
-            style={styles.matchCard}
-            onPress={() => navigation.navigate('ValorantMatchSim')}
+        <TouchableOpacity
+          style={styles.matchCard}
+          onPress={() => navigation.navigate('DraftMapScreen', {
+            matchData: { opponent: teamStats.nextMatch?.opponent || 'Sentinels' },
+            opponentTeam: { name: teamStats.nextMatch?.opponent || 'Sentinels' }
+          })}
         >
-            <ImageBackground 
-                source={{ uri: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt99661f49646b9552/5f80a069578430292796e624/VALORANT_Jett_Red_Crop.jpg' }} 
-                style={styles.matchBg}
-                imageStyle={{ borderRadius: 12, opacity: 0.4 }}
+          <ImageBackground
+            source={{ uri: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt99661f49646b9552/5f80a069578430292796e624/VALORANT_Jett_Red_Crop.jpg' }}
+            style={styles.matchBg}
+            imageStyle={{ borderRadius: 12, opacity: 0.4 }}
+          >
+            <LinearGradient
+              colors={['transparent', 'rgba(15, 23, 42, 0.9)']}
+              style={styles.matchContent}
             >
-                <LinearGradient
-                    colors={['transparent', 'rgba(15, 23, 42, 0.9)']}
-                    style={styles.matchContent}
-                >
-                    <View style={styles.matchInfo}>
-                        <Text style={styles.matchLabel}>UPCOMING SCRIM</Text>
-                        <Text style={styles.opponentName}>VS {teamStats.nextMatch?.opponent}</Text>
-                        <View style={styles.timeTag}>
-                            <Ionicons name="time-outline" size={14} color="#fff" />
-                            <Text style={styles.timeText}>
-                                {teamStats.nextMatch?.date} @ {teamStats.nextMatch?.time}
-                            </Text>
-                        </View>
-                    </View>
-                    <View style={styles.playButton}>
-                        <Ionicons name="play" size={24} color="#fff" />
-                    </View>
-                </LinearGradient>
-            </ImageBackground>
+              <View style={styles.matchInfo}>
+                <Text style={styles.matchLabel}>UPCOMING SCRIM</Text>
+                <Text style={styles.opponentName}>VS {teamStats.nextMatch?.opponent}</Text>
+                <View style={styles.timeTag}>
+                  <Ionicons name="time-outline" size={14} color="#fff" />
+                  <Text style={styles.timeText}>
+                    {teamStats.nextMatch?.date} @ {teamStats.nextMatch?.time}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.playButton}>
+                <Ionicons name="play" size={24} color="#fff" />
+              </View>
+            </LinearGradient>
+          </ImageBackground>
         </TouchableOpacity>
 
       </ScrollView>
@@ -222,7 +225,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  
+
   // Header Row Custom
   headerRow: {
     flexDirection: 'row',
