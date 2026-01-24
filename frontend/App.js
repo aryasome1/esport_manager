@@ -51,6 +51,7 @@ import AgentDetailScreen from './src/screens/valorant/AgentDetailScreen';
 import MapTacticScreen from './src/screens/valorant/MapTacticScreen';
 import TacticalMatchScreen from './src/screens/valorant/TacticalMatchScreen'; // <--- Tambah Import
 import AgentPickScreen from './src/screens/valorant/AgentPickScreen'; // <--- Agent Pick Screen
+import DraftMapScreen from './src/screens/valorant/DraftMapScreen'; // <--- BO3 Map Veto Screen
 
 // Setup Screen
 import TeamSetupScreen from './src/screens/setup/TeamSetupScreen';
@@ -243,6 +244,7 @@ function TacticalStackContainer({ onExit }) {
       <Stack.Screen name="PlayerProfile" component={PlayerProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AgentDetail" component={AgentDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen name="MapTactic" component={MapTacticScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="DraftMapScreen" component={DraftMapScreen} options={{ headerShown: false }} />
 
     </Stack.Navigator>
   );
